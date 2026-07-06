@@ -1,0 +1,6 @@
+id: flatten-deep
+problem_statement: |
+  `flatten(nested)` in nest.py should recursively flatten arbitrarily nested lists into a single flat list. It currently only flattens one level deep. Fix it to recurse to any depth.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

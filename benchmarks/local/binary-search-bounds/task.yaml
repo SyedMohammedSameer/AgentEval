@@ -1,0 +1,6 @@
+id: binary-search-bounds
+problem_statement: |
+  `search(arr, target)` in bsearch.py does binary search on a sorted list and returns the index or -1. The high bound is initialised to len(arr) instead of len(arr)-1, which causes an IndexError when the target is larger than all elements. Fix the bounds.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

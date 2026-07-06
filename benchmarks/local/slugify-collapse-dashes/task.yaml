@@ -1,0 +1,6 @@
+id: slugify-collapse-dashes
+problem_statement: |
+  `slugify(text)` in textutils.py converts a string to a URL slug. It currently leaves runs of multiple spaces/punctuation as repeated hyphens and can produce leading/trailing hyphens. Fix it so that: consecutive non-alphanumeric characters collapse to a single hyphen, and there are no leading or trailing hyphens. Output must be lowercase.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

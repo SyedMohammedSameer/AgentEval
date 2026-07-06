@@ -1,0 +1,152 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>agenteval report</title>
+<style>
+  body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 2rem auto; max-width: 960px; color: #1a1a1a; }
+  h1 { margin-bottom: .2rem; } .sub { color:#666; margin-top:0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
+  th, td { padding: .5rem .7rem; border-bottom: 1px solid #e5e5e5; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background:#fafafa; font-weight:600; }
+  .bar { height: 14px; background: #2563eb; border-radius: 3px; display:inline-block; }
+  .pos { color:#16a34a; } .neg { color:#dc2626; } .dim { color:#999; }
+  .mode { font-family: ui-monospace, monospace; font-size: 13px; }
+  code { background:#f3f3f3; padding:1px 4px; border-radius:3px; }
+</style></head><body>
+<h1>agenteval — coding-agent evaluation</h1>
+<p class="sub">10 run(s) · model(s): qwen2.5-coder:1.5b, qwen2.5-coder:7b</p>
+
+<h2>Solve rate</h2>
+<table>
+<tr><th>condition</th><th>solve rate</th><th>Δ vs baseline</th><th></th><th>avg steps</th><th>completion tokens</th></tr>
+
+<tr>
+  <td>qwen2.5-coder:1.5b · baseline</td>
+  <td>41.7%  (5/12)</td>
+  <td class="dim">—</td>
+  <td><span class="bar" style="width:75.0px"></span></td>
+  <td>15.5</td>
+  <td>20,841</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:1.5b · best_of_3</td>
+  <td>41.7%  (5/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:75.0px"></span></td>
+  <td>15.5</td>
+  <td>49,887</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:1.5b · no_repo_map</td>
+  <td>58.3%  (7/12)</td>
+  <td class="pos">+16.7%</td>
+  <td><span class="bar" style="width:104.0px"></span></td>
+  <td>11.0</td>
+  <td>22,489</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:1.5b · no_test_tool</td>
+  <td>8.3%  (1/12)</td>
+  <td class="neg">-33.3%</td>
+  <td><span class="bar" style="width:14.0px"></span></td>
+  <td>20.0</td>
+  <td>25,111</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:1.5b · windowed_history</td>
+  <td>41.7%  (5/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:75.0px"></span></td>
+  <td>15.5</td>
+  <td>21,117</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:7b · baseline</td>
+  <td>91.7%  (11/12)</td>
+  <td class="dim">—</td>
+  <td><span class="bar" style="width:165.0px"></span></td>
+  <td>3.42</td>
+  <td>3,957</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:7b · best_of_3</td>
+  <td>91.7%  (11/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:165.0px"></span></td>
+  <td>3.42</td>
+  <td>4,525</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:7b · no_repo_map</td>
+  <td>91.7%  (11/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:165.0px"></span></td>
+  <td>3.58</td>
+  <td>4,541</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:7b · no_test_tool</td>
+  <td>91.7%  (11/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:165.0px"></span></td>
+  <td>5.17</td>
+  <td>6,844</td>
+</tr>
+
+<tr>
+  <td>qwen2.5-coder:7b · windowed_history</td>
+  <td>91.7%  (11/12)</td>
+  <td class="dim">+0.0%</td>
+  <td><span class="bar" style="width:165.0px"></span></td>
+  <td>3.42</td>
+  <td>3,957</td>
+</tr>
+
+</table>
+
+<h2>Failure modes by condition</h2>
+<table>
+<tr><th>mode</th><th>qwen2.5-coder:1.5b · baseline</th><th>qwen2.5-coder:1.5b · best_of_3</th><th>qwen2.5-coder:1.5b · no_repo_map</th><th>qwen2.5-coder:1.5b · no_test_tool</th><th>qwen2.5-coder:1.5b · windowed_history</th><th>qwen2.5-coder:7b · baseline</th><th>qwen2.5-coder:7b · best_of_3</th><th>qwen2.5-coder:7b · no_repo_map</th><th>qwen2.5-coder:7b · no_test_tool</th><th>qwen2.5-coder:7b · windowed_history</th></tr>
+
+<tr><td class="mode" title="Patch applied and all target tests passed.">solved</td>
+<td>5</td><td>5</td><td>7</td><td>1</td><td>5</td><td>11</td><td>11</td><td>11</td><td>11</td><td>11</td>
+</tr>
+
+<tr><td class="mode" title="Agent submitted or gave up without editing any file (localization/confidence failure).">no_edit</td>
+<td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td>
+</tr>
+
+<tr><td class="mode" title="Agent's diff was malformed and did not apply (edit-formatting failure).">patch_apply_failed</td>
+<td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+<tr><td class="mode" title="Patch applied cleanly but did not fix the bug (reasoning/correctness failure).">wrong_fix</td>
+<td>1</td><td>1</td><td>2</td><td>0</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+<tr><td class="mode" title="Ran out of step budget before submitting a working fix (efficiency failure).">max_steps</td>
+<td>4</td><td>4</td><td>0</td><td>9</td><td>4</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+<tr><td class="mode" title="Candidate patch caused the test suite to time out (introduced a hang/regression).">eval_timeout</td>
+<td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+<tr><td class="mode" title="Model repeatedly failed to emit a valid action (instruction-following failure).">protocol_violation</td>
+<td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+<tr><td class="mode" title="Unclassified.">unknown</td>
+<td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td>
+</tr>
+
+</table>
+<p class="dim">Hover a mode for its definition. Baseline = first run.</p>
+</body></html>

@@ -1,0 +1,6 @@
+id: rle-encode-last-run
+problem_statement: |
+  `encode(s)` in rle.py does run-length encoding: 'aaabb' -> 'a3b2'. It drops the FINAL run because it only emits a run when the character changes. Fix it to emit the last run too. Empty input returns ''.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

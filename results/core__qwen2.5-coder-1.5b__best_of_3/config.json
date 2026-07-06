@@ -1,0 +1,25 @@
+{
+  "name": "core__qwen2.5-coder-1.5b__best_of_3",
+  "provider": "local",
+  "subset": "smoke",
+  "model": {
+    "model": "qwen2.5-coder:1.5b",
+    "base_url": "http://localhost:11434/v1",
+    "api_key": "ollama",
+    "temperature": 0.0,
+    "max_tokens": 2048,
+    "request_timeout": 180.0
+  },
+  "agent": {
+    "max_steps": 20,
+    "use_test_tool": true,
+    "include_repo_map": true,
+    "max_observation_chars": 4000,
+    "history_strategy": "full",
+    "history_window": 12,
+    "self_check": true,
+    "attempts": 3
+  },
+  "seed": 0,
+  "output_dir": "results"
+}

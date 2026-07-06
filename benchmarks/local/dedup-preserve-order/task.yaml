@@ -1,0 +1,6 @@
+id: dedup-preserve-order
+problem_statement: |
+  `dedup(items)` in seqtools.py should remove duplicates while preserving the order of first appearance. It currently returns items in an arbitrary order because it goes through a set. Fix it to preserve first-seen order.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

@@ -1,0 +1,6 @@
+id: merge-intervals
+problem_statement: |
+  `merge(intervals)` in intervals.py merges overlapping intervals (lists of [start, end]). It fails to merge intervals that merely touch, e.g. [1,2] and [2,3], because it uses a strict `<` comparison. Touching intervals should merge. Return merged intervals sorted by start.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

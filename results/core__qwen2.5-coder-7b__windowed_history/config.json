@@ -1,0 +1,25 @@
+{
+  "name": "core__qwen2.5-coder-7b__windowed_history",
+  "provider": "local",
+  "subset": "smoke",
+  "model": {
+    "model": "qwen2.5-coder:7b",
+    "base_url": "http://localhost:11434/v1",
+    "api_key": "ollama",
+    "temperature": 0.0,
+    "max_tokens": 2048,
+    "request_timeout": 180.0
+  },
+  "agent": {
+    "max_steps": 20,
+    "use_test_tool": true,
+    "include_repo_map": true,
+    "max_observation_chars": 4000,
+    "history_strategy": "windowed",
+    "history_window": 8,
+    "self_check": true,
+    "attempts": 1
+  },
+  "seed": 0,
+  "output_dir": "results"
+}

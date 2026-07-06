@@ -1,0 +1,18 @@
+{
+  "run_name": "core__qwen2.5-coder-1.5b__no_repo_map",
+  "model": "qwen2.5-coder:1.5b",
+  "num_tasks": 12,
+  "num_resolved": 7,
+  "solve_rate": 0.5833,
+  "failure_breakdown": {
+    "wrong_fix": 2,
+    "no_edit": 2,
+    "solved": 7,
+    "patch_apply_failed": 1
+  },
+  "avg_steps": 11.0,
+  "avg_wall_time_s": 12.96,
+  "total_prompt_tokens": 327879,
+  "total_completion_tokens": 22489,
+  "attempts_used": {}
+}

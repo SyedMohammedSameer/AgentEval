@@ -1,0 +1,17 @@
+{
+  "run_name": "core__qwen2.5-coder-1.5b__no_test_tool",
+  "model": "qwen2.5-coder:1.5b",
+  "num_tasks": 12,
+  "num_resolved": 1,
+  "solve_rate": 0.0833,
+  "failure_breakdown": {
+    "max_steps": 9,
+    "no_edit": 2,
+    "solved": 1
+  },
+  "avg_steps": 20.0,
+  "avg_wall_time_s": 14.34,
+  "total_prompt_tokens": 405166,
+  "total_completion_tokens": 25111,
+  "attempts_used": {}
+}

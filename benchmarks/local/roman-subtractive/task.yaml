@@ -1,0 +1,6 @@
+id: roman-subtractive
+problem_statement: |
+  `to_roman(n)` in roman.py converts an integer (1..3999) to a Roman numeral, but it does not handle subtractive notation (4, 9, 40, 90, 400, 900), so it returns e.g. 'IIII' instead of 'IV'. Fix it to use standard subtractive notation.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

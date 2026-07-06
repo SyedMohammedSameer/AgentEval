@@ -1,0 +1,6 @@
+id: caesar-cipher-wrap
+problem_statement: |
+  `encode(text, shift)` in cipher.py is a Caesar cipher. It shifts letters but does not wrap around the alphabet, so shifting 'z' by 1 produces a non-letter instead of 'a'. Non-letters must pass through unchanged, case must be preserved, and shifts larger than 26 must wrap. Fix the wrap-around.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

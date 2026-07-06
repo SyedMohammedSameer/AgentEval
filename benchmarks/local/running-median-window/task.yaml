@@ -1,0 +1,6 @@
+id: running-median-window
+problem_statement: |
+  `moving_average(nums, k)` in stats.py should return the list of averages of every contiguous window of size k. It currently has an off-by-one error in the range and raises IndexError / drops the last window. Fix the windowing.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

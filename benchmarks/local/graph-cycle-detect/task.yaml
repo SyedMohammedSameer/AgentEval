@@ -1,0 +1,6 @@
+id: graph-cycle-detect
+problem_statement: |
+  `has_cycle(adj)` in graph.py detects whether a directed graph (adjacency dict) has a cycle. It uses a single visited set and so misreports DAGs with shared descendants as cyclic, and can miss real cycles. Implement correct DFS cycle detection using a recursion/on-stack set.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

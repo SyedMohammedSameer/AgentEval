@@ -1,0 +1,6 @@
+id: balanced-brackets
+problem_statement: |
+  `is_balanced(s)` in brackets.py checks whether brackets ()[]{} are balanced and properly nested. It currently only counts opens vs closes and ignores nesting/type, so '([)]' and '(]' are wrongly reported as balanced. Fix it to check proper nesting.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

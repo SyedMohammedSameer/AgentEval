@@ -1,0 +1,6 @@
+id: chunk-list
+problem_statement: |
+  `chunk(lst, n)` in chunk.py should split a list into consecutive chunks of size n (the last may be shorter). It currently steps by 1 instead of n, producing overlapping windows. Fix the step.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120

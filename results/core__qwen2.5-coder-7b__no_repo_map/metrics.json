@@ -1,0 +1,16 @@
+{
+  "run_name": "core__qwen2.5-coder-7b__no_repo_map",
+  "model": "qwen2.5-coder:7b",
+  "num_tasks": 12,
+  "num_resolved": 11,
+  "solve_rate": 0.9167,
+  "failure_breakdown": {
+    "solved": 11,
+    "no_edit": 1
+  },
+  "avg_steps": 3.58,
+  "avg_wall_time_s": 8.71,
+  "total_prompt_tokens": 24496,
+  "total_completion_tokens": 4541,
+  "attempts_used": {}
+}
