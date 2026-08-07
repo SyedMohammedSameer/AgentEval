@@ -1,0 +1,8 @@
+id: log-rotate-retention
+problem_statement: |
+  `logrotate` decides which rotated log files to delete. `sort_rotations` sorts filenames lexically, so `app.log.10` sorts before `app.log.2` once the index reaches double digits and retention then deletes the wrong files; and `files_to_delete` slices one past the retention limit, keeping one more file than asked. Fix both. Files with no rotation index are never deleted.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

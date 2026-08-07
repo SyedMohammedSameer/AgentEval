@@ -1,0 +1,8 @@
+id: priority-queue-tiebreak
+problem_statement: |
+  `pqueue.queue.PriorityQueue` should pop the lowest priority value first, breaking ties by insertion order. It pushes `(priority, item)` tuples onto a heap, so whenever two priorities tie the heap compares the *items* themselves: equal-priority entries come out ordered by payload rather than insertion, and payloads that are not orderable (dicts, or mixed types) raise TypeError outright. Fix it so payloads are never compared.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

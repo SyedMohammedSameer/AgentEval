@@ -17,20 +17,20 @@ The floor is structural: an exact McNemar test needs **at least 6 tasks to flip 
 same direction** before it can return p < 0.05, no matter how many seeds you run.
 That gives a hard reading of what any given benchmark size can do:
 
-| tasks | power at a large effect (33% of tasks flip) |
-|---|---|
-| 12 | 18% |
-| 20 | 69% |
-| 28 | 94% |
-| 40 | 100% |
+| tasks | large effect (33% flip) | moderate effect (20% flip) |
+|---|---|---|
+| 12 | 18% | 12% |
+| 20 | 69% | 34% |
+| 28 | 94% | 50% |
+| **38** (current) | **100%** | **81%** |
 
 The original 12-task benchmark had an **18% chance** of detecting its own headline
 effect. That is why the benchmark was expanded; it is not a cosmetic change.
 
-At the current 28 tasks the sweep has 94% power for a large effect but only ~50% for a
-moderate one (a fifth of tasks flipping) — reaching 80% there needs about 38 tasks. Plan
-on reporting moderate-sized effects as nulls with the interval shown, or add tasks first
-if that is the effect size you care about.
+At the current 38 tasks the sweep is well powered for both large and moderate effects.
+A *small* effect (15% of tasks flipping) is still only ~53% — reaching 80% there would
+take ~52 tasks. Report anything that small as a null with the interval shown rather than
+narrating it as a trend.
 
 **Seeds are not tasks.** Replicating a condition across seeds reduces label noise on
 the tasks you have — it does not add independent evidence about an effect. Power comes
@@ -75,7 +75,7 @@ make ablate          # 6 conditions x 3 seeds x 2 models
 Expect this to take hours, not minutes — plan on running it overnight. The rough
 shape on an M-series laptop, per model:
 
-- 6 conditions x 3 seeds x ~28 tasks ≈ 500 rollouts
+- 6 conditions x 3 seeds x 38 tasks ≈ 680 rollouts
 - `best_of_3` costs up to 3x per unsolved task, so it dominates the tail
 - the 7B is several times slower per step than the 1.5B
 

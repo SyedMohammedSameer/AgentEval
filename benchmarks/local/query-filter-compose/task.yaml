@@ -1,0 +1,8 @@
+id: query-filter-compose
+problem_statement: |
+  `query.compose` builds composite row filters out of the predicates in `query.predicates`. `any_of` matches every row regardless of its predicates, and `none_of` only consults the first predicate it is given. Fix both. Follow the usual conventions for empty inputs: `all_of()` and `none_of()` match everything, `any_of()` matches nothing.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

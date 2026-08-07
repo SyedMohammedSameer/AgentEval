@@ -45,12 +45,12 @@ where a large effect moves ~4 tasks is arithmetically incapable of significance.
 
 Simulating the observed effect size gives the power directly:
 
-| tasks | power at a large effect (33% of tasks flip) |
-|---|---|
-| 12 | **18%** |
-| 20 | 69% |
-| 28 | 94% |
-| 40 | 100% |
+| tasks | large effect (33% flip) | moderate effect (20% flip) |
+|---|---|---|
+| 12 | **18%** | 12% |
+| 20 | 69% | 34% |
+| 28 | 94% | 50% |
+| 38 (current) | 100% | 81% |
 
 **v1 had an 18% chance of detecting its own headline finding.** It is not evidence for
 the claim; it is a coin flip that landed suggestively.
@@ -92,14 +92,17 @@ helpers. `metrics.py` records per-task outcomes, without which no paired test is
 Every reporting surface — CLI table, HTML dashboard, README block — prints the interval
 and the p-value alongside the rate, so a bare percentage cannot be copied out of them.
 
-**The benchmark went from 12 to 28 tasks**, and 16 of the new ones are multi-file
+**The benchmark went from 12 to 38 tasks**, and all 26 new ones are multi-file
 application-shaped bugs (config layering, cache TTL and eviction, cursor pagination,
 semver precedence, sliding-window rate limiting, CSV quoting, dependency cycles, route
-precedence, permission inheritance, batch flushing, schema validation). Two reasons:
-power (18% → 94% for a large effect) and construct validity — the original tasks are
-textbook algorithms present verbatim in any code model's pretraining data, so a solve was
-partly recall. Bugs that live at the seam between two modules make localization a real
-step.
+precedence, permission inheritance, batch flushing, schema validation, state-machine
+guard ordering, predicate composition, diff hunk offsets, priority-queue tie-breaking,
+query encoding, markdown list nesting, stock reservation, circuit-breaker reset,
+feature-flag override precedence, log retention). Two reasons: power (18% → 100% for a
+large effect, 12% → 81% for a moderate one) and construct validity — the original tasks
+are textbook algorithms present verbatim in any code model's pretraining data, so a solve
+was partly recall. Bugs that live at the seam between two modules make localization a
+real step.
 
 **Every task now ships a gold patch** under `benchmarks/local/<task>/solution/`, never
 visible to the agent. `make validate` requires the gold patch to pass the oracle, which
@@ -120,15 +123,18 @@ often enough that single-seed numbers would be mostly noise.
 
 ## What the re-run can and cannot settle
 
-At 28 tasks the sweep has 94% power for a large effect (a third of tasks flipping) and
-about 50% for a moderate one (a fifth). So:
+At 38 tasks the sweep has ~100% power for a large effect (a third of tasks flipping) and
+81% for a moderate one (a fifth). So:
 
 - A large `run_tests` effect on the small model, if real, will be detected and can be
   stated with an interval.
-- A moderate effect — plausibly the size of the context-construction levers — is still a
-  coin flip. Reaching 80% power there needs ~38 tasks. Report those as nulls with the
-  interval shown, and do not narrate a mechanism for a difference the data cannot
-  distinguish from zero.
+- A moderate effect — plausibly the size of the context-construction levers — is now
+  measurable rather than a coin flip, which is the specific reason the benchmark went
+  past 28. A null there is now informative: it means the effect is probably smaller than
+  a fifth of tasks, not that the experiment could not see it.
+- A *small* effect (a seventh of tasks) remains at ~53% power and would need ~52 tasks.
+  Report anything that small as a null with the interval shown, and do not narrate a
+  mechanism for a difference the data cannot distinguish from zero.
 - Anything about the 7B depends on whether the multi-file tasks pull it off the ceiling.
   If it lands above ~90% again, the cross-tier comparison is still not measurable and the
   honest move is to say so and pick a harder task set, not to publish the +0s as a

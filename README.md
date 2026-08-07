@@ -58,7 +58,7 @@ ollama pull qwen2.5-coder:7b
 
 # 3. build the benchmark and check it is sound
 make benchmark
-make validate            # must print "28/28 tasks valid"
+make validate            # must print "38/38 tasks valid"
 
 # 4. check the sweep can actually detect what you're looking for
 make power
@@ -90,16 +90,18 @@ conditions disagree, and reports which tasks each condition broke or fixed.
 until at least **six tasks flip in the same direction**, which puts a hard floor under
 how small a benchmark can be and still conclude anything:
 
-| tasks | power to detect a large effect (33% of tasks flip) |
-|---|---|
-| 12 | 18% |
-| 20 | 69% |
-| 28 | 94% |
-| 40 | 100% |
+| tasks | large effect (33% flip) | moderate effect (20% flip) |
+|---|---|---|
+| 12 | 18% | 12% |
+| 20 | 69% | 34% |
+| 28 | 94% | 50% |
+| **38** | **100%** | **81%** |
 
 `agenteval power` prints this for any effect size. The original 12-task benchmark had
 an **18% chance** of detecting its own headline effect — which is why the benchmark was
-expanded to 28 tasks.
+expanded to 38 tasks, the point where a moderate effect (the plausible size of the
+context-construction levers) clears 80% power rather than coming back as an
+uninformative null.
 
 Seeds are not a substitute for tasks. Replicating a condition across seeds reduces
 label noise on the tasks you have; only more tasks add independent evidence about an
@@ -126,7 +128,7 @@ updated, because three independent problems made them uninterpretable:
    rollouts, so the reported "+0 from retries" was a config bug, not a null result.
 
 The v1 run directories are preserved under `results/legacy-v1/` and are excluded from
-analysis. Re-running `make ablate` on the 28-task benchmark regenerates this block with
+analysis. Re-running `make ablate` on the 38-task benchmark regenerates this block with
 intervals and p-values.
 
 <!-- RESULTS:END -->
@@ -136,16 +138,19 @@ Interactive report at `results/dashboard.html` (`make dashboard`).
 
 ## The local benchmark
 
-Twenty-eight self-contained Python bug-fix tasks (`benchmarks/local/`), each with a
+Thirty-eight self-contained Python bug-fix tasks (`benchmarks/local/`), each with a
 genuine bug, a *visible* basic test the agent can run, and a *hidden* oracle used only
 for scoring — mirroring "you have some tests, CI has more."
 
 - **12 single-file algorithm tasks** (slugify, RLE, binary search, …).
-- **16 multi-file application tasks** — a small package where the bug lives at the seam
+- **26 multi-file application tasks** — a small package where the bug lives at the seam
   between modules: config layering, cache eviction and TTL, cursor pagination, semver
   precedence, sliding-window rate limiting, CSV quoting, dependency cycles, route
-  precedence, permission inheritance, batch flushing, schema validation. Localization is
-  a real step, and these have no canonical published solution to recall.
+  precedence, permission inheritance, batch flushing, schema validation, state-machine
+  guards, predicate composition, diff hunk offsets, priority-queue tie-breaking, query
+  encoding, markdown list nesting, stock reservation, circuit-breaker reset, feature-flag
+  overrides, log retention. Localization is a real step, and these have no canonical
+  published solution to recall.
 
 Authored by `scripts/build_local_benchmark.py` and checked by
 `scripts/validate_benchmark.py`, which enforces four properties per task:

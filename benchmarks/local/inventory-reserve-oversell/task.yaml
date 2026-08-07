@@ -1,0 +1,8 @@
+id: inventory-reserve-oversell
+problem_statement: |
+  `inventory.store.Store` tracks stock with reservations: `available` is on-hand minus reserved. Two bugs let the ledger report stock that does not exist. `reserve` checks the requested quantity against on-hand rather than against what is still available, so successive reservations can oversell the same units; and `release` subtracts unconditionally, so releasing more than was reserved drives the reserved count negative and inflates availability. Fix both.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

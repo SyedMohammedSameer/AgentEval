@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from gold_patches import GOLD_PATCHES
 from tasks_advanced import ADVANCED_TASKS
+from tasks_extended import EXTENDED_TASKS
 
 ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "local"
 
@@ -662,7 +663,7 @@ def write_task(t: dict) -> None:
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
-    all_tasks = TASKS + ADVANCED_TASKS
+    all_tasks = TASKS + ADVANCED_TASKS + EXTENDED_TASKS
 
     ids = [t["id"] for t in all_tasks]
     duplicates = {i for i in ids if ids.count(i) > 1}
