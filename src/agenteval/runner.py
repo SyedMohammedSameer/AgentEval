@@ -118,3 +118,46 @@ def _print_summary(m: RunMetrics, wall: float) -> None:
         for mode, cnt in sorted(m.failure_breakdown.items(), key=lambda x: -x[1]):
             ft.add_row(mode, str(cnt))
         console.print(ft)
+
+    for note in headroom_warnings(m):
+        console.print(f"[yellow]![/] {note}")
+
+
+def headroom_warnings(m: RunMetrics) -> list[str]:
+    """Flag a tier that arithmetically cannot yield a significant ablation.
+
+    Power analysis asks whether *enough* tasks would flip. This asks the blunter
+    prior question: how many tasks are even able to flip. An ablation that removes
+    a capability can only break tasks the baseline solved, and one that adds a
+    capability can only fix tasks it failed. Either count can sit below the six
+    one-directional flips exact McNemar needs for p<0.05, in which case no seed
+    count and no sample size rescues the comparison — the tier is the problem.
+
+    Worth knowing after a single ~10-minute baseline probe rather than after an
+    overnight sweep that was never able to conclude.
+    """
+    from .stats import min_discordant_for_significance
+
+    floor = min_discordant_for_significance()
+    unsolved = m.num_tasks - m.num_resolved
+    notes = []
+
+    if 0 < m.num_resolved < floor:
+        notes.append(
+            f"floor: only {m.num_resolved} of {m.num_tasks} tasks solved. An ablation that "
+            f"removes a capability can flip at most {m.num_resolved}, and exact McNemar needs "
+            f"{floor} to reach p<0.05 — so no negative result on this tier can be significant. "
+            "Raise --max-steps or move to a stronger model before sweeping."
+        )
+    if 0 < unsolved < floor:
+        notes.append(
+            f"ceiling: only {unsolved} of {m.num_tasks} tasks unsolved. An ablation can improve "
+            f"at most {unsolved}, below the {floor} flips needed for p<0.05 — this tier is too "
+            "strong for the task set to measure anything on."
+        )
+    if m.num_resolved == 0:
+        notes.append(
+            f"this tier solved nothing; every condition will read 0% and every delta +0. "
+            "Fix the tier or the step budget before spending a sweep on it."
+        )
+    return notes

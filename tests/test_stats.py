@@ -201,3 +201,43 @@ def test_rollout_rate_differs_from_task_rate():
     assert cs.solve_rate == 0.5              # a solved in a majority of seeds
     assert cs.rollout_rate == pytest.approx(2 / 6)
     assert cs.num_rollouts == 6
+
+
+# ------------------------------------------------------- headroom warnings
+def _metrics(resolved: int, tasks: int):
+    from agenteval.metrics import RunMetrics
+    from agenteval.stats import wilson_interval
+
+    return RunMetrics(
+        run_name="r", model="m", num_tasks=tasks, num_resolved=resolved,
+        solve_rate=resolved / tasks, solve_rate_ci=wilson_interval(resolved, tasks),
+    )
+
+
+def test_floor_warning_when_too_few_solves_to_flip():
+    """5 solved caps flips at 5, below the 6 exact McNemar needs — no seed count
+    or sample size can rescue a negative result on such a tier."""
+    from agenteval.runner import headroom_warnings
+
+    notes = headroom_warnings(_metrics(5, 38))
+    assert any("floor" in n for n in notes)
+
+
+def test_no_floor_warning_once_solves_clear_the_threshold():
+    from agenteval.runner import headroom_warnings
+
+    assert headroom_warnings(_metrics(18, 38)) == []
+
+
+def test_ceiling_warning_when_too_few_failures():
+    from agenteval.runner import headroom_warnings
+
+    notes = headroom_warnings(_metrics(35, 38))
+    assert any("ceiling" in n for n in notes)
+
+
+def test_zero_solves_is_called_out_explicitly():
+    from agenteval.runner import headroom_warnings
+
+    notes = headroom_warnings(_metrics(0, 38))
+    assert any("solved nothing" in n for n in notes)

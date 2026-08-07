@@ -173,6 +173,24 @@ def coverage_warnings(conditions: dict[tuple[str, str], ConditionSummary]) -> li
             )
             break  # one notice per sweep is enough; the task set is shared
 
+    # A baseline with too few solves (or too few failures) caps how many tasks can
+    # possibly flip, which bounds significance regardless of seeds or task count.
+    for (model, cond), cs in sorted(conditions.items()):
+        if cond != "baseline" or not cs.num_tasks:
+            continue
+        unsolved = cs.num_tasks - cs.num_resolved
+        if 0 < cs.num_resolved < floor:
+            warnings.append(
+                f"{model}: baseline solved {cs.num_resolved}/{cs.num_tasks}, so an ablation "
+                f"can break at most {cs.num_resolved} tasks — under the {floor} flips needed "
+                f"for p<0.05. Negative results on this tier cannot reach significance."
+            )
+        elif 0 < unsolved < floor:
+            warnings.append(
+                f"{model}: baseline left only {unsolved}/{cs.num_tasks} unsolved, so no "
+                f"condition can improve by the {floor} flips needed for p<0.05."
+            )
+
     for (model, cond), cs in sorted(conditions.items()):
         if len(cs.seeds) == 1:
             warnings.append(
