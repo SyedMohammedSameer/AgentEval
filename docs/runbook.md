@@ -41,8 +41,41 @@ tasks to make the result mean something.
 
 ```bash
 make install
-ollama pull qwen2.5-coder:1.5b
-ollama pull qwen2.5-coder:7b
+make models        # pulls the three default tiers
+```
+
+### Cost
+
+Nothing here is billable. Every model call goes to a local Ollama server, and the
+SWE-bench provider drives local Docker. There are no API keys and no metered calls —
+the cost is electricity and disk.
+
+### Choosing model tiers
+
+The default sweep uses `qwen2.5-coder` at **0.5b, 1.5b and 3b** (roughly 0.4 GB, 1 GB
+and 2 GB on disk). Two reasons it is not one big model plus one small one:
+
+- **Three points make a curve.** The claim this project is built to test — that
+  scaffolding value falls as base-model capability rises — is a claim about a trend.
+  Two tiers can only draw a line through two points; three can show it is monotone.
+- **Headroom beats size.** In v1 the 7B solved 92% of tasks, so four of five ablations
+  returned +0 for it. A model with no room to fall cannot show a lever's effect. Tiers
+  are worth choosing for the headroom they leave, not for how strong they are.
+
+Counter-intuitively, **weaker models cost more wall time here**, because they flail:
+
+| v1 baseline | avg steps | avg wall time / task |
+|---|---|---|
+| `qwen2.5-coder:1.5b` | 15.5 | 12.5s |
+| `qwen2.5-coder:7b` | 3.4 | 6.7s |
+
+The 7B was slower per token but finished each task in about half the time, since it
+took roughly a fifth of the steps. Do not budget on parameter count.
+
+To use a different set:
+
+```bash
+make ablate MODEL_TIERS="qwen2.5-coder:1.5b qwen2.5-coder:7b"
 ```
 
 ## 2. Build and validate the benchmark
@@ -69,25 +102,31 @@ Do not run a sweep until this is clean.
 ## 3. The sweep
 
 ```bash
-make ablate          # 6 conditions x 3 seeds x 2 models
+make ablate-one      # one tier first — confirms the pipeline end to end
+make ablate          # all three tiers
 ```
 
-Expect this to take hours, not minutes — plan on running it overnight. The rough
-shape on an M-series laptop, per model:
+Expect hours, not minutes; plan on running it overnight. Per tier:
 
 - 6 conditions x 3 seeds x 38 tasks ≈ 680 rollouts
-- `best_of_3` costs up to 3x per unsolved task, so it dominates the tail
-- the 7B is several times slower per step than the 1.5B
+- `best_of_3` spends up to 3x per *unsolved* task, so it dominates the tail — and it
+  costs most on the weakest tier, which solves least
+- v1 averaged 6–13s per task on 12 easy single-file tasks. The 38-task set is harder,
+  so steps per task will rise; treat any extrapolation from v1 as a lower bound
 
-Narrow it while iterating:
+Run `make ablate-one` before the full sweep. It produces a complete, analyzable result
+for one tier in roughly a third of the time, and if something is misconfigured you find
+out after a few hours rather than overnight.
+
+Narrow further while iterating:
 
 ```bash
-make ablate-fast                                     # 1 seed, small model only
+make ablate-fast                                     # 1 seed, 1 tier
 agenteval run --name probe --subset config-layered-merge,csv-quoted-fields
 ```
 
-`--subset` takes a comma-separated list of task ids, which is the fastest way to
-debug the harness itself without paying for a full sweep.
+`--subset` takes a comma-separated list of task ids, which is the fastest way to debug
+the harness itself without paying for a full sweep.
 
 ### What the conditions mean
 

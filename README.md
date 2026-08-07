@@ -53,8 +53,8 @@ provider (local | swebench)      # loads tasks, builds sandboxes, scores patches
 # 1. install (dev deps only — no Docker/SWE-bench needed)
 make install
 
-# 2. get a local model
-ollama pull qwen2.5-coder:7b
+# 2. get the model tiers (three small ones — see docs/runbook.md)
+make models
 
 # 3. build the benchmark and check it is sound
 make benchmark
@@ -64,12 +64,18 @@ make validate            # must print "38/38 tasks valid"
 make power
 
 # 5. run the sweep and render the report
-make ablate              # 6 conditions x 3 seeds x 2 models — takes hours
+make ablate-one          # one tier first, to confirm the pipeline end to end
+make ablate              # 6 conditions x 3 seeds x 3 model tiers — takes hours
 make dashboard
 open results/dashboard.html
 ```
 
-Full procedure, including cost and what to check at each step, is in
+Everything runs against a local Ollama server: **no API keys, nothing billable.** The
+default tiers are `qwen2.5-coder` at 0.5b/1.5b/3b — small enough for a modest laptop,
+and chosen for headroom rather than strength (see
+[Choosing model tiers](docs/runbook.md#choosing-model-tiers)).
+
+Full procedure, including runtime and what to check at each step, is in
 [docs/runbook.md](docs/runbook.md).
 
 ## Measuring honestly
