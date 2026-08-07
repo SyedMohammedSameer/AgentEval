@@ -1,0 +1,8 @@
+id: fsm-guard-before-transition
+problem_statement: |
+  `fsm.machine.Machine` drives a state machine whose transitions may carry a guard predicate. Two defects: the target state is applied *before* the guard is consulted, so a transition the guard rejects still moves the machine and still appends to history; and an event with no matching transition is silently ignored instead of raising `UnknownTransition`, which makes a typo look like a successful no-op. Fix both. `fire` returns True only when the machine actually moved.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

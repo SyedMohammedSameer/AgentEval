@@ -1,0 +1,8 @@
+id: lru-cache-ttl-expiry
+problem_statement: |
+  `cache.store.TTLCache` is an LRU cache with per-entry expiry, using the injectable clock in `cache.clock`. Expired entries are still being returned by `get`, and eviction picks the wrong victim because reads do not refresh recency. Fix both so that an expired key behaves exactly like a missing key, and eviction removes the least *recently used* entry.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

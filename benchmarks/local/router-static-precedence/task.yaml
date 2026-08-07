@@ -1,0 +1,8 @@
+id: router-static-precedence
+problem_statement: |
+  `router.match.Router` maps URL paths to handlers, supporting `{param}` segments. Matching is order-dependent: a dynamic route registered before a static one swallows requests the static route should win (`/users/{id}` shadows `/users/me`). Fix matching so a static segment always beats a dynamic one at the same position, regardless of registration order. Segment count must still match exactly.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

@@ -1,0 +1,8 @@
+id: authz-deny-precedence
+problem_statement: |
+  `authz.check.can` decides whether a role may perform an action, with roles inheriting permissions from parents defined in `authz.roles`. An explicit deny on a child role is currently overridden by an inherited allow, when deny must always win. Inheritance also fails to terminate on a role cycle. Fix both: an explicit deny anywhere in the inheritance chain beats any allow, and a cycle must not hang.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

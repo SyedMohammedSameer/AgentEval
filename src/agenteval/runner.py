@@ -50,13 +50,18 @@ def _run_task(agent: Agent, provider, task: Task, attempts: int) -> tuple[Trajec
 def run(cfg: RunConfig) -> RunMetrics:
     provider = get_provider(cfg.provider)
     tasks = provider.load_tasks(cfg.subset)
-    agent = Agent(cfg.model, cfg.agent, run_name=cfg.name)
+    agent = Agent(cfg.model, cfg.agent, run_name=cfg.name, seed=cfg.seed)
 
     out_dir = Path(cfg.output_dir) / cfg.name
     traj_dir = out_dir / "trajectories"
     traj_dir.mkdir(parents=True, exist_ok=True)
 
-    console.rule(f"[bold]Run '{cfg.name}'  model={cfg.model.model}  provider={cfg.provider}  tasks={len(tasks)}")
+    console.rule(
+        f"[bold]Run '{cfg.name}'  model={cfg.model.model}  provider={cfg.provider}  "
+        f"tasks={len(tasks)}  seed={cfg.seed}  T={cfg.model.temperature}"
+    )
+    for w in cfg.warnings():
+        console.print(f"[yellow]warning:[/] {w}")
 
     best_per_task: list[Trajectory] = []
     every_attempt: list[Trajectory] = []
@@ -73,7 +78,14 @@ def run(cfg: RunConfig) -> RunMetrics:
 
         (traj_dir / f"{task.task_id}.json").write_text(best.to_json())
 
-    metrics = summarize(cfg.name, cfg.model.model, best_per_task, every_attempt)
+    metrics = summarize(
+        cfg.name,
+        cfg.model.model,
+        best_per_task,
+        every_attempt,
+        seed=cfg.seed,
+        temperature=cfg.model.temperature,
+    )
 
     # Persist run artifacts.
     (out_dir / "config.json").write_text(json.dumps(cfg.to_dict(), indent=2))
@@ -88,7 +100,11 @@ def _print_summary(m: RunMetrics, wall: float) -> None:
     table = Table(show_header=True, header_style="bold")
     table.add_column("metric")
     table.add_column("value", justify="right")
-    table.add_row("solve rate", f"{m.solve_rate:.1%}  ({m.num_resolved}/{m.num_tasks})")
+    lo, hi = m.solve_rate_ci
+    table.add_row(
+        "solve rate",
+        f"{m.solve_rate:.1%}  ({m.num_resolved}/{m.num_tasks})  [95% CI {lo:.0%}-{hi:.0%}]",
+    )
     table.add_row("avg steps", f"{m.avg_steps}")
     table.add_row("avg wall time", f"{m.avg_wall_time_s}s")
     table.add_row("completion tokens", f"{m.total_completion_tokens:,}")

@@ -1,0 +1,8 @@
+id: csv-quoted-fields
+problem_statement: |
+  `csvlite.reader.parse_line` splits a single CSV line into fields. It handles plain fields but breaks on quoting: a comma inside a quoted field splits it in two, and a doubled quote ("") inside a quoted field should produce one literal quote character rather than terminating the field. Fix the parser. Surrounding quotes are not part of the value.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

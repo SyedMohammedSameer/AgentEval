@@ -1,0 +1,8 @@
+id: diff-hunk-offset
+problem_statement: |
+  `patcher.apply.apply_hunks` applies a list of replacement hunks to a text. Each hunk's `start` refers to a line number in the *original* text, but applying a hunk that inserts or removes lines shifts every later line. No offset is tracked, so the second and subsequent hunks land in the wrong place whenever an earlier hunk changed the line count. Fix it. Hunks are applied in ascending `start` order regardless of the order given, and a hunk outside the text raises `PatchError`.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

@@ -28,8 +28,16 @@ class LLMClient:
         self.cfg = cfg
         self._client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key, timeout=cfg.request_timeout)
 
-    def chat(self, messages: list[dict], *, max_retries: int = 3) -> LLMResponse:
-        """One chat completion. Retries transient errors with linear backoff."""
+    def chat(
+        self, messages: list[dict], *, max_retries: int = 3, seed: int | None = None
+    ) -> LLMResponse:
+        """One chat completion. Retries transient errors with linear backoff.
+
+        `seed` is forwarded to the endpoint so sampling is reproducible at
+        temperature > 0. Ollama and the OpenAI API both honor it; endpoints that
+        don't simply ignore the field, in which case runs stay valid but lose
+        exact replayability.
+        """
         last_err: Exception | None = None
         for attempt in range(max_retries):
             t0 = time.monotonic()
@@ -39,6 +47,7 @@ class LLMClient:
                     messages=messages,
                     temperature=self.cfg.temperature,
                     max_tokens=self.cfg.max_tokens,
+                    **({} if seed is None else {"seed": seed}),
                 )
                 latency = time.monotonic() - t0
                 usage = resp.usage

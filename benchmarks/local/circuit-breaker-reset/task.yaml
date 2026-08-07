@@ -1,0 +1,8 @@
+id: circuit-breaker-reset
+problem_statement: |
+  `breaker.circuit.CircuitBreaker` trips open after `threshold` consecutive failures and, once `reset_after` seconds have passed, allows a trial call in the half-open state. The failure counter is never cleared on success, so the count is cumulative rather than consecutive and the breaker eventually trips on an isolated failure; and a successful half-open trial leaves the breaker half-open instead of closing it. Fix both.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

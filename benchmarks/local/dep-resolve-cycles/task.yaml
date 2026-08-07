@@ -1,0 +1,8 @@
+id: dep-resolve-cycles
+problem_statement: |
+  `deps.resolve.resolve_order` returns the order in which packages must be installed, given each package's dependencies. Two bugs: a dependency reached by more than one path (a diamond) is emitted twice, and a dependency cycle causes infinite recursion instead of raising `CycleError`. Fix both. Dependencies must appear before the packages that require them.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

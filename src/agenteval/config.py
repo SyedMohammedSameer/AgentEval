@@ -57,8 +57,33 @@ class RunConfig:
     subset: str = "smoke"               # provider-specific subset identifier
     model: ModelConfig = field(default_factory=ModelConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    # Base sampling seed. Replicating a condition across several seeds is how a
+    # solve rate gets an error bar that reflects sampling noise rather than one draw.
     seed: int = 0
     output_dir: str = "results"
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def warnings(self) -> list[str]:
+        """Config combinations that silently waste compute or invalidate a result.
+
+        Surfaced before a run starts, because the failure they describe is
+        indistinguishable from a real null result once the numbers are in: a
+        best-of-N sweep at temperature 0 draws N identical rollouts and reports a
+        confident +0, which reads as "retries don't help" rather than "this
+        experiment never ran".
+        """
+        out = []
+        if self.agent.attempts > 1 and self.model.temperature == 0.0:
+            out.append(
+                f"attempts={self.agent.attempts} at temperature=0 draws identical rollouts: "
+                f"{self.agent.attempts}x the tokens for a guaranteed +0. "
+                "Set --temperature > 0 for any multi-sample condition."
+            )
+        if self.agent.history_strategy == "windowed" and self.agent.history_window < 4:
+            out.append(
+                f"history_window={self.agent.history_window} is smaller than a single "
+                "think/act/observe cycle; the agent will not see its own last action."
+            )
+        return out

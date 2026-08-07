@@ -1,0 +1,8 @@
+id: cursor-pagination-boundary
+problem_statement: |
+  `api.paginate.page` returns a slice of records plus a cursor for the next page. Paging through a collection currently repeats one record at every page boundary, and the final page reports a next-cursor even though nothing follows. Fix it so that walking the cursors yields every record exactly once and the last page returns a next-cursor of None.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

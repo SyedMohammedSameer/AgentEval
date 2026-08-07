@@ -1,0 +1,8 @@
+id: daterange-merge-adjacent
+problem_statement: |
+  `ranges.merge.merge_all` collapses a list of half-open integer ranges [start, end) into the smallest equivalent set. Two bugs: ranges that merely touch (10-20 and 20-30) are left separate when they should combine into 10-30, and a range wholly contained inside another is emitted as a duplicate. Fix both. Output must be sorted by start, and empty ranges (start == end) must be dropped.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

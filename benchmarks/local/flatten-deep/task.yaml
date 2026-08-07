@@ -4,3 +4,5 @@ problem_statement: |
 dev_test_cmd: python -m pytest -q test_basic.py
 eval_test_cmd: python -m pytest -q
 timeout: 120
+multi_file: false
+has_gold_patch: true

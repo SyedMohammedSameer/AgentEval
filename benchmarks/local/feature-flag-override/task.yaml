@@ -1,0 +1,8 @@
+id: feature-flag-override
+problem_statement: |
+  `flags.rollout.FlagSet` decides whether a feature is on for a user, combining a percentage rollout (bucketed by the stable hash in `flags.hashing`) with per-user overrides. Overrides are only consulted when the percentage roll fails, so an explicit `False` override cannot switch a flag off for a user the rollout already includes; and the bucket comparison uses `<=`, so bucket 0 passes even at 0 percent. Fix both: an override always wins, and `percent` is the share of buckets strictly below it.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

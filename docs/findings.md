@@ -1,72 +1,147 @@
 # Findings
 
-Local benchmark: 12 single-file Python bug-fix tasks, hidden pytest oracle. Two base models
-(Qwen2.5-Coder 1.5B and 7B via Ollama, temperature 0). Each ablation flips one `AgentConfig`
-field vs. the baseline. All numbers are `results/core__*/metrics.json`.
+## Status
 
-## Solve rate by condition × model
+The v1 results have been **withdrawn**, not revised. This document explains what they
+claimed, why the claims did not hold, and what the harness now does so the re-run
+produces something publishable. Run directories from v1 are preserved under
+`results/legacy-v1/` and excluded from analysis.
+
+The short version: the numbers were probably pointing at something real, but the
+experiment could not have demonstrated it, and two of the four conditions were measuring
+something other than what they were labelled.
+
+## What v1 claimed
+
+Twelve single-file Python bug-fix tasks, two model tiers (Qwen2.5-Coder 1.5B and 7B via
+Ollama, temperature 0), one seed per condition.
 
 | condition | 1.5B | 7B |
 |---|---|---|
 | baseline | 42% (5/12) | 92% (11/12) |
-| − run_tests tool | **8% (−33)** | 92% (+0) |
+| − run_tests tool | 8% (−33) | 92% (+0) |
 | − repo map | 58% (+17) | 92% (+0) |
 | windowed history | 42% (+0) | 92% (+0) |
 | best-of-3 | 42% (+0) | 92% (+0) |
 
-## 1. Scaffolding value is inversely proportional to base-model capability
+The headline was "scaffolding value is inversely proportional to base-model capability",
+resting on the −33 point drop for the 1.5B and +0 for the 7B.
 
-The single biggest lever — the `run_tests` tool — is worth **+33 points for the 1.5B model
-and 0 for the 7B**. The 7B model solves these tasks from the problem statement alone, so no
-amount of tool/context scaffolding moves it. The 1.5B model depends on the feedback loop.
+## What was wrong
 
-**Implication:** scaffolding ROI must be measured *per model tier*. A tool that looks
-worthless on your strongest model may be load-bearing on a smaller/cheaper one — relevant when
-choosing what to ship on a latency- or cost-constrained deployment.
+### 1. The sample could not support any of it
 
-## 2. The failure taxonomy explains *why* the tool matters
+With 12 tasks, a 42% solve rate has a 95% Wilson interval of **19–68%**. The `+17` for
+removing the repo map is a two-task swing well inside that.
 
-Removing `run_tests` doesn't just lower the score — it changes the *shape* of failure:
+Worse, the headline effect could not have reached significance either. Conditions run on
+the same tasks, so the correct test is paired (exact McNemar). Per-task outcomes were not
+recorded in v1, but the marginals (5/12 vs 1/12) bound the result: across every pairing
+consistent with them, the best achievable p-value is **0.125**.
 
-| failure mode | 1.5B baseline | 1.5B − run_tests |
+This is structural, not bad luck. Exact McNemar needs at least **six tasks to flip in the
+same direction** before it can return p < 0.05 — `2 × 0.5⁶ = 0.031`. A 12-task benchmark
+where a large effect moves ~4 tasks is arithmetically incapable of significance.
+
+Simulating the observed effect size gives the power directly:
+
+| tasks | large effect (33% flip) | moderate effect (20% flip) |
 |---|---|---|
-| solved | 5 | 1 |
-| max_steps | 4 | **9** |
-| no_edit | 2 | 2 |
-| wrong_fix | 1 | 0 |
+| 12 | **18%** | 12% |
+| 20 | 69% | 34% |
+| 28 | 94% | 50% |
+| 38 (current) | 100% | 81% |
 
-Without a way to check its work, the agent can't tell whether it's done, so it spins until the
-step budget runs out: `max_steps` failures more than double (4 → 9). The verification loop
-isn't just improving fixes — it's letting the agent *terminate confidently*. This is the kind
-of mechanistic read a raw solve rate can't give you.
+**v1 had an 18% chance of detecting its own headline finding.** It is not evidence for
+the claim; it is a coin flip that landed suggestively.
 
-## 3. More context is not always better
+### 2. The 7B was at a ceiling
 
-Removing the repo-file map *improved* the 1.5B model by **+17 points** (42% → 58%). For these
-small single-file tasks the file listing is low-signal, and it appears to distract a
-capacity-limited model more than it helps. Context construction is a tuning problem, not a
-"more is better" one — worth an A/B rather than an assumption.
+92% on 12 tasks leaves one solvable task of headroom. Four of five ablations returned +0
+for the 7B, which was read as "scaffolding doesn't help strong models". A lever that
+cannot move a score because the score is pinned has not been measured — it has been
+hidden. The "inversely proportional to capability" story needs a task set where both
+tiers have room to move in both directions.
 
-_(N = 12, so treat this as directional; the effect is large enough and the mechanism plausible
-enough to warrant a bigger run, not to bank on the exact magnitude.)_
+### 3. Five tasks gave the `run_tests` tool nothing to report
 
-## 4. Best-of-N needs sampling diversity
+The new validator checks that each task's *visible* test fails on the buggy code. Five of
+the original twelve failed that check: `balanced-brackets`, `caesar-cipher-wrap`,
+`dedup-preserve-order`, `flatten-deep`, `merge-intervals`. On those, `test_basic.py`
+passed on the buggy code, so an agent running `run_tests` saw green and learned nothing.
 
-Best-of-3 gave **+0** for both models — because at temperature 0 the three independent rollouts
-are identical, so there is nothing to select over. The harness dutifully ran 3× the tokens for
-no gain. Correct next step: raise temperature (or vary the prompt) for multi-sample conditions.
-A good example of an ablation surfacing a config bug rather than a capability limit.
+This lands squarely on the headline. The `no_test_tool` ablation removes a tool that was
+informative on only 7 of 12 tasks, so the measured effect is a blend of "verification
+matters" and "the visible tests were weak" — with no way to separate them after the fact.
 
----
+### 4. Best-of-3 never ran
 
-## Resume bullets (pick 1–2)
+Three attempts at temperature 0 draw three *identical* rollouts. The condition spent 3×
+the tokens and reported +0. That is not a null result about retries; the experiment
+never happened.
 
-- Built a benchmark-agnostic evaluation harness for LLM coding agents (Python, ReAct loop,
-  OpenAI-compatible model access, Docker-based SWE-bench provider) that measures solve rate,
-  logs full trajectories, and classifies failures into a 7-mode taxonomy.
-- Ran controlled ablations across two model tiers and showed the `run_tests` verification tool
-  is worth **+33 pts solve rate for a 1.5B model but 0 for a 7B** — quantifying that scaffolding
-  ROI is inversely proportional to base-model capability.
-- Used the failure taxonomy to explain the mechanism (removing verification doubled
-  `max_steps` non-termination, 4→9), and caught a multi-sampling bug where temperature-0
-  best-of-N wasted 3× tokens for no gain.
+It also could not have been fixed by simply raising the temperature, because then
+`best_of_3` would differ from the temperature-0 baseline in two fields at once, and any
+delta would confound retries with sampling temperature.
+
+## What changed
+
+**Uncertainty is now structural, not editorial.** `stats.py` provides Wilson intervals,
+exact McNemar, a paired task-level bootstrap for delta CIs, and power/sample-size
+helpers. `metrics.py` records per-task outcomes, without which no paired test is possible.
+Every reporting surface — CLI table, HTML dashboard, README block — prints the interval
+and the p-value alongside the rate, so a bare percentage cannot be copied out of them.
+
+**The benchmark went from 12 to 38 tasks**, and all 26 new ones are multi-file
+application-shaped bugs (config layering, cache TTL and eviction, cursor pagination,
+semver precedence, sliding-window rate limiting, CSV quoting, dependency cycles, route
+precedence, permission inheritance, batch flushing, schema validation, state-machine
+guard ordering, predicate composition, diff hunk offsets, priority-queue tie-breaking,
+query encoding, markdown list nesting, stock reservation, circuit-breaker reset,
+feature-flag override precedence, log retention). Two reasons: power (18% → 100% for a
+large effect, 12% → 81% for a moderate one) and construct validity — the original tasks
+are textbook algorithms present verbatim in any code model's pretraining data, so a solve
+was partly recall. Bugs that live at the seam between two modules make localization a
+real step.
+
+**Every task now ships a gold patch** under `benchmarks/local/<task>/solution/`, never
+visible to the agent. `make validate` requires the gold patch to pass the oracle, which
+proves each task is solvable rather than merely broken. An unsolvable task does not look
+broken in the results — it looks hard, and it drags every condition toward zero equally.
+
+**Best-of-N gets a control.** `sampling_control` runs one attempt at the same temperature
+as `best_of_3`, and the retry lever is measured as `best_of_3` vs `sampling_control`.
+Sampling seeds are derived per (run seed, task, attempt), so attempts genuinely differ
+while runs stay reproducible. Configs that cannot produce a valid result — multi-sampling
+at temperature 0, a history window shorter than one think/act/observe cycle — are now
+flagged before the run starts.
+
+**Conditions are replicated across seeds**, with a task counted as solved if it succeeded
+in a majority of its seeds. Seeds reduce label noise; they do not inflate n. Tests and
+intervals are computed over tasks, and the report warns when tasks flip across seeds
+often enough that single-seed numbers would be mostly noise.
+
+## What the re-run can and cannot settle
+
+At 38 tasks the sweep has ~100% power for a large effect (a third of tasks flipping) and
+81% for a moderate one (a fifth). So:
+
+- A large `run_tests` effect on the small model, if real, will be detected and can be
+  stated with an interval.
+- A moderate effect — plausibly the size of the context-construction levers — is now
+  measurable rather than a coin flip, which is the specific reason the benchmark went
+  past 28. A null there is now informative: it means the effect is probably smaller than
+  a fifth of tasks, not that the experiment could not see it.
+- A *small* effect (a seventh of tasks) remains at ~53% power and would need ~52 tasks.
+  Report anything that small as a null with the interval shown, and do not narrate a
+  mechanism for a difference the data cannot distinguish from zero.
+- Anything about the 7B depends on whether the multi-file tasks pull it off the ceiling.
+  If it lands above ~90% again, the cross-tier comparison is still not measurable and the
+  honest move is to say so and pick a harder task set, not to publish the +0s as a
+  finding.
+
+The failure-taxonomy mechanism from v1 — that removing verification more than doubled
+`max_steps` non-termination, so the agent could not tell when to stop — is the most
+interesting observation in the project and is worth re-checking directly, since it is a
+claim about the *shape* of failure that does not depend on the solve-rate delta reaching
+significance.

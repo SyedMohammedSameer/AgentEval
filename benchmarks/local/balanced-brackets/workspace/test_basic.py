@@ -7,3 +7,7 @@ def test_ok():
 
 def test_bad_count():
     assert is_balanced("(()") is False
+
+
+def test_mismatched_types():
+    assert is_balanced("(]") is False
