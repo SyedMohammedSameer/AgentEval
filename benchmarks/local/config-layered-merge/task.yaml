@@ -1,0 +1,8 @@
+id: config-layered-merge
+problem_statement: |
+  The `conf` package applies configuration layers in order, with later layers overriding earlier ones. Nested sections are being clobbered: setting a single key inside a section drops that section's other keys. Fix the merge so nested dicts combine recursively, while non-dict values still replace. The merge must not mutate its inputs.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

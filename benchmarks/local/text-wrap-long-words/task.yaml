@@ -1,0 +1,8 @@
+id: text-wrap-long-words
+problem_statement: |
+  `wrapping.wrap.wrap_text` breaks a string into lines of at most `width` characters. A single word longer than `width` currently produces a line that exceeds the limit instead of being hard-split across lines, and lines come back with trailing spaces. Fix both. Words are separated by single spaces in the output, no line may exceed `width`, and an empty input yields an empty list.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

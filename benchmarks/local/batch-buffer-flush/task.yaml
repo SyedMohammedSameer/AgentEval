@@ -1,0 +1,8 @@
+id: batch-buffer-flush
+problem_statement: |
+  `batch.buffer.Batcher` accumulates items and flushes them to a sink when the batch reaches `max_size` or `max_age` seconds have passed since the batch's first item. Two bugs: `close()` discards a partially filled batch instead of flushing it, and the age check measures from the most recent item rather than the first, so a steady trickle of items never ages out. Fix both; flushes must preserve order and an empty batch must never reach the sink.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

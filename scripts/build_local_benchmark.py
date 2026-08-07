@@ -9,7 +9,13 @@ CI has more. Run:  python scripts/build_local_benchmark.py
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from gold_patches import GOLD_PATCHES
+from tasks_advanced import ADVANCED_TASKS
 
 ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "local"
 
@@ -87,6 +93,10 @@ from seqtools import dedup
 
 def test_basic():
     assert dedup([1, 1, 2, 3]) == [1, 2, 3]
+
+
+def test_order_of_first_appearance():
+    assert dedup([3, 1, 3, 2]) == [3, 1, 2]
 ''',
         "oracle": '''\
 from seqtools import dedup
@@ -222,6 +232,10 @@ def test_ok():
 
 def test_bad_count():
     assert is_balanced("(()") is False
+
+
+def test_mismatched_types():
+    assert is_balanced("(]") is False
 ''',
         "oracle": '''\
 from brackets import is_balanced
@@ -334,6 +348,10 @@ from cipher import encode
 
 def test_simple():
     assert encode("abc", 1) == "bcd"
+
+
+def test_wraps_past_z():
+    assert encode("z", 1) == "a"
 ''',
         "oracle": '''\
 from cipher import encode
@@ -381,6 +399,10 @@ from nest import flatten
 
 def test_one_level():
     assert flatten([1, [2, 3], 4]) == [1, 2, 3, 4]
+
+
+def test_two_levels():
+    assert flatten([1, [2, [3, 4]]]) == [1, 2, 3, 4]
 ''',
         "oracle": '''\
 from nest import flatten
@@ -426,6 +448,10 @@ from intervals import merge
 
 def test_overlap():
     assert merge([[1, 3], [2, 6]]) == [[1, 6]]
+
+
+def test_touching_intervals_merge():
+    assert merge([[1, 2], [2, 3]]) == [[1, 3]]
 ''',
         "oracle": '''\
 from intervals import merge
@@ -587,6 +613,17 @@ def test_bigger_than_list():
 ]
 
 
+def task_files(t: dict) -> dict[str, str]:
+    """Workspace sources for a task, normalizing the two authoring shapes.
+
+    Single-file tasks declare `module`/`buggy`; multi-file tasks declare a `files`
+    mapping. Everything downstream sees the same dict.
+    """
+    if "files" in t:
+        return dict(t["files"])
+    return {t["module"]: t["buggy"]}
+
+
 def write_task(t: dict) -> None:
     d = ROOT / t["id"]
     if d.exists():
@@ -594,9 +631,21 @@ def write_task(t: dict) -> None:
     (d / "workspace").mkdir(parents=True)
     (d / "tests").mkdir(parents=True)
 
-    (d / "workspace" / t["module"]).write_text(t["buggy"])
+    for rel, content in task_files(t).items():
+        path = d / "workspace" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
     (d / "workspace" / "test_basic.py").write_text(t["basic"])
     (d / "tests" / "test_oracle.py").write_text(t["oracle"])
+
+    # The gold patch is stored outside workspace/ so it is never copied into an
+    # environment the agent can see. validate_benchmark.py is its only consumer.
+    if t.get("fix"):
+        for rel, content in t["fix"].items():
+            path = d / "solution" / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
 
     yaml_text = (
         f"id: {t['id']}\n"
@@ -605,15 +654,32 @@ def write_task(t: dict) -> None:
         + "dev_test_cmd: python -m pytest -q test_basic.py\n"
         "eval_test_cmd: python -m pytest -q\n"
         "timeout: 120\n"
+        f"multi_file: {str(len(task_files(t)) > 1).lower()}\n"
+        f"has_gold_patch: {str(bool(t.get('fix'))).lower()}\n"
     )
     (d / "task.yaml").write_text(yaml_text)
 
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
-    for t in TASKS:
+    all_tasks = TASKS + ADVANCED_TASKS
+
+    ids = [t["id"] for t in all_tasks]
+    duplicates = {i for i in ids if ids.count(i) > 1}
+    if duplicates:
+        raise SystemExit(f"duplicate task ids: {sorted(duplicates)}")
+
+    for t in all_tasks:
+        # Single-file tasks keep their gold patch in gold_patches.py rather than
+        # inline, so the fix never sits beside the text describing the bug.
+        if "fix" not in t and t["id"] in GOLD_PATCHES:
+            t = {**t, "fix": GOLD_PATCHES[t["id"]]}
         write_task(t)
-    print(f"Wrote {len(TASKS)} tasks to {ROOT}")
+
+    multi = sum(1 for t in all_tasks if len(task_files(t)) > 1)
+    gold = sum(1 for t in all_tasks if t.get("fix"))
+    print(f"Wrote {len(all_tasks)} tasks to {ROOT}")
+    print(f"  {multi} multi-file, {gold} with gold patches")
 
 
 if __name__ == "__main__":

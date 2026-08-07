@@ -7,6 +7,7 @@ ablation is a single config field flip. Produces a Trajectory (eval is filled la
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 from .config import AgentConfig, ModelConfig
@@ -18,16 +19,36 @@ from .trajectory import ActionType, Step, Trajectory
 
 
 class Agent:
-    def __init__(self, model_cfg: ModelConfig, agent_cfg: AgentConfig, run_name: str = "run"):
+    def __init__(
+        self,
+        model_cfg: ModelConfig,
+        agent_cfg: AgentConfig,
+        run_name: str = "run",
+        seed: int = 0,
+    ):
         self.model_cfg = model_cfg
         self.cfg = agent_cfg
         self.run_name = run_name
+        self.seed = seed
         self.llm = LLMClient(model_cfg)
+
+    def _rollout_seed(self, task_id: str, attempt: int) -> int:
+        """A distinct, reproducible sampling seed per (run seed, task, attempt).
+
+        Attempt number is mixed in deliberately: best-of-N is worthless if every
+        attempt draws the same sample, which is exactly what a single fixed seed
+        (or temperature 0) produces. Derived from a stable hash rather than
+        `hash()`, which is salted per process and would break reproducibility
+        across invocations.
+        """
+        key = f"{self.seed}:{task_id}:{attempt}".encode()
+        return int.from_bytes(hashlib.sha256(key).digest()[:4], "big")
 
     def rollout(self, task: Task, env: Environment, attempt: int = 0) -> Trajectory:
         """One independent attempt at the task. The runner handles best-of-N /
         pass@k by calling this multiple times with fresh environments."""
         t0 = time.monotonic()
+        rollout_seed = self._rollout_seed(task.task_id, attempt)
         traj = Trajectory(
             task_id=task.task_id, run_name=self.run_name, model=self.model_cfg.model
         )
@@ -39,7 +60,9 @@ class Agent:
         ]
 
         for i in range(self.cfg.max_steps):
-            resp = self.llm.chat(self._context(messages))
+            # Vary the seed by step as well, so a model that stalls doesn't redraw
+            # the identical token sequence forever at temperature > 0.
+            resp = self.llm.chat(self._context(messages), seed=rollout_seed + i)
             action = parse_action(resp.content)
             observation, done = self._execute(action, task, env)
 

@@ -1,0 +1,8 @@
+id: semver-prerelease-order
+problem_statement: |
+  `semver` parses and compares versions. Comparison is wrong in two ways: a version with a prerelease tag (1.0.0-alpha) is treated as *newer* than the matching release (1.0.0) when it must be older, and numeric prerelease identifiers are compared as strings so 1.0.0-2 sorts before 1.0.0-10. Fix `compare` to follow semver precedence.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

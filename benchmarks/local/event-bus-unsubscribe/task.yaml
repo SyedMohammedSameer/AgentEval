@@ -1,0 +1,8 @@
+id: event-bus-unsubscribe
+problem_statement: |
+  `events.bus.EventBus` dispatches an event to subscribed handlers in priority order (higher priority first). Two defects: handlers registered with equal priority run in reverse registration order instead of registration order, and a handler that unsubscribes itself during dispatch causes later handlers to be skipped. Fix both.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

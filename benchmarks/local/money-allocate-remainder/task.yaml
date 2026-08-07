@@ -1,0 +1,8 @@
+id: money-allocate-remainder
+problem_statement: |
+  `money.allocate.allocate` splits an integer amount of cents across weighted recipients. Rounding loses or invents cents: the allocated parts do not always sum back to the original amount. Fix it so the parts always sum exactly to `amount`, distributing any remainder one cent at a time to the recipients with the largest fractional part (ties broken by original order). Negative amounts are not supported and must raise ValueError.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

@@ -1,0 +1,8 @@
+id: retry-attempt-budget
+problem_statement: |
+  `retry.runner.call_with_retry` retries a failing function using the backoff schedule from `retry.policy`. Two things are wrong: the function is invoked one more time than `max_attempts` allows, and the backoff grows without bound instead of being capped at `max_delay`. Fix both. A successful call must not sleep at all, and the last failure's exception should propagate.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

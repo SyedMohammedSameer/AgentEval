@@ -1,0 +1,8 @@
+id: rate-limit-sliding-window
+problem_statement: |
+  `limits.window.SlidingWindow` should allow at most `limit` calls in any rolling `window` seconds, using the injectable clock from `limits.clock`. It currently behaves like a fixed window that resets on a boundary, which lets through up to twice the limit across a boundary. Rewrite `allow` to enforce a true sliding window: a call is permitted only if fewer than `limit` calls occurred in the preceding `window` seconds.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true

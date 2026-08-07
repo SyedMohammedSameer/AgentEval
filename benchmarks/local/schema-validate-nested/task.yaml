@@ -1,0 +1,8 @@
+id: schema-validate-nested
+problem_statement: |
+  `schema.validate.validate` checks a dict against a small schema spec built from `schema.types`. Nested object schemas are not descended into at all, so errors inside them go unreported, and a field explicitly marked optional is still reported as missing when absent. Fix both. Error paths must be dotted (`user.address.city`) and the returned list must be empty when the value is valid.
+dev_test_cmd: python -m pytest -q test_basic.py
+eval_test_cmd: python -m pytest -q
+timeout: 120
+multi_file: true
+has_gold_patch: true
