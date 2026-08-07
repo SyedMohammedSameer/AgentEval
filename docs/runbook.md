@@ -99,6 +99,41 @@ benchmark bug rather than an agent result:
 
 Do not run a sweep until this is clean.
 
+## 2b. Probe each tier before sweeping it
+
+One baseline condition over all 38 tasks takes about 10 minutes and decides whether a
+tier is worth an overnight run:
+
+```bash
+make baseline                                   # MODEL_MAIN
+make baseline MODEL_MAIN=qwen2.5-coder:7b
+```
+
+**The headroom rule.** Before power, before seeds, ask how many tasks are *able* to
+flip. An ablation that removes a capability can only break tasks the baseline solved,
+and exact McNemar needs six one-directional flips for p<0.05. A tier that solves five
+tasks can therefore never produce a significant negative result — not with more seeds,
+not with more tasks. `make baseline` prints this warning itself when it applies.
+
+| baseline solve rate | verdict |
+|---|---|
+| under ~16% (fewer than 6 solved) | floor: negative results cannot reach significance |
+| ~30-70% | ideal — headroom in both directions |
+| over ~84% (fewer than 6 unsolved) | ceiling: improvements cannot reach significance |
+
+Measured on the 38-task benchmark, `max_steps=20`:
+
+| tier | solve rate | dominant failure | read |
+|---|---|---|---|
+| `qwen2.5-coder:1.5b` | 13% (5/38) | `max_steps` 16, `no_edit` 10 | below the floor |
+| `qwen2.5-coder:7b` | 47% (18/38) | `wrong_fix` 16 | ideal |
+
+The failure mix says *why*, and points at different fixes. The 1.5B's `max_steps` and
+`no_edit` mean it mostly fails to engage — a bigger step budget may help the former,
+nothing helps the latter. The 7B's `wrong_fix` majority means it localizes and edits but
+reasons wrongly, which is the failure verification is supposed to catch, so the
+`run_tests` ablation has something real to move.
+
 ## 3. The sweep
 
 ```bash
