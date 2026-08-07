@@ -76,6 +76,13 @@ def main(argv: list[str] | None = None) -> None:
     rep.add_argument("--suite", default=None, help="limit to one suite (default: all runs)")
     rep.add_argument("--output-dir", default="results")
 
+    rc = sub.add_parser(
+        "reclassify",
+        help="re-apply the current failure taxonomy to saved trajectories (no model calls)",
+    )
+    rc.add_argument("runs", nargs="*", help="run names under results/ (default: all)")
+    rc.add_argument("--output-dir", default="results")
+
     pw = sub.add_parser("power", help="how many tasks a sweep needs to detect an effect")
     pw.add_argument(
         "--effect", type=float, default=0.2,
@@ -105,6 +112,9 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "report":
         from .ablation import report
         report(args.suite, output_dir=args.output_dir)
+    elif args.cmd == "reclassify":
+        from .runner import reclassify
+        reclassify(args.runs, output_dir=args.output_dir)
     elif args.cmd == "power":
         _power(args)
 

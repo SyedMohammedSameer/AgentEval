@@ -128,11 +128,25 @@ Measured on the 38-task benchmark, `max_steps=20`:
 | `qwen2.5-coder:1.5b` | 13% (5/38) | `max_steps` 16, `no_edit` 10 | below the floor |
 | `qwen2.5-coder:7b` | 47% (18/38) | `wrong_fix` 16 | ideal |
 
-The failure mix says *why*, and points at different fixes. The 1.5B's `max_steps` and
-`no_edit` mean it mostly fails to engage — a bigger step budget may help the former,
-nothing helps the latter. The 7B's `wrong_fix` majority means it localizes and edits but
-reasons wrongly, which is the failure verification is supposed to catch, so the
-`run_tests` ablation has something real to move.
+The failure mix says *why*, and points at different fixes. The 7B's `wrong_fix` majority
+means it localizes and edits but reasons wrongly — the failure verification is meant to
+catch, so the `run_tests` ablation has something real to move.
+
+The 1.5B's budget failures turned out **not** to be a budget problem. Re-running it at
+`--max-steps 30` produced a byte-identical outcome distribution (5 solved, 16 budget
+failures, 10 `no_edit`, 7 `wrong_fix`) while spending 44% more tokens: at temperature 0
+the first 20 steps are identical, and the extra 10 converted nothing. It was looping,
+not running out of room — which is why the taxonomy separates `livelock` from
+`max_steps`. It also solved 0 of the 26 multi-file tasks; all five solves were textbook
+algorithms from the original single-file set.
+
+Before assuming a budget failure means "raise the budget", check the split:
+
+```bash
+agenteval reclassify        # re-label saved trajectories, no model calls
+```
+
+`livelock` means a bigger budget will not help; `max_steps` means it might.
 
 ## 3. The sweep
 

@@ -106,3 +106,63 @@ def test_local_provider_eval_roundtrip():
     assert good_patch.strip(), "expected a non-empty diff"
     assert prov.evaluate(task, good_patch).resolved is True
     assert prov.evaluate(task, "").resolved is False
+
+
+# ------------------------------------------ budget exhaustion vs livelock
+def _steps(traj, actions):
+    for i, (kind, payload) in enumerate(actions):
+        traj.add(Step(i, "", kind, payload, "obs"))
+    return traj
+
+
+def test_repeated_actions_classify_as_livelock():
+    """Raising max_steps converts none of these, so they must not be labelled as
+    a budget shortfall — the fix they point at is termination, not more room."""
+    from agenteval.failure_taxonomy import repetition_ratio
+
+    t = _traj(patch="", stop_reason="max_steps")
+    _steps(t, [(ActionType.BASH.value, "cat foo.py")] * 10)
+    assert repetition_ratio(t) > 0.5
+    assert classify(t) == FailureMode.LIVELOCK
+
+
+def test_livelock_outranks_no_edit():
+    """Looping for the whole budget without editing is not the same failure as
+    submitting an empty patch after two steps; only the latter is a decision."""
+    looped = _traj(patch="", stop_reason="max_steps")
+    _steps(looped, [(ActionType.BASH.value, "ls")] * 12)
+    assert classify(looped) == FailureMode.LIVELOCK
+
+    gave_up = _traj(patch="", stop_reason="submit")
+    _steps(gave_up, [(ActionType.BASH.value, "ls"), (ActionType.SUBMIT.value, "")])
+    assert classify(gave_up) == FailureMode.NO_EDIT
+
+
+def test_distinct_actions_remain_max_steps():
+    t = _traj(patch="diff --git a b", eval_details={"reason": "tests_failed"},
+              stop_reason="max_steps")
+    _steps(t, [(ActionType.BASH.value, f"cmd {i}") for i in range(10)])
+    assert classify(t) == FailureMode.MAX_STEPS
+
+
+def test_partial_repetition_below_threshold_is_max_steps():
+    t = _traj(patch="diff --git a b", eval_details={"reason": "tests_failed"},
+              stop_reason="max_steps")
+    # 7 distinct of 10 steps -> ratio 0.3, under the livelock threshold.
+    _steps(t, [(ActionType.BASH.value, f"cmd {i}") for i in range(7)]
+              + [(ActionType.BASH.value, "cmd 0")] * 3)
+    assert classify(t) == FailureMode.MAX_STEPS
+
+
+def test_livelock_detected_even_with_a_patch_present():
+    """An agent that edited, then looped, is still non-terminating."""
+    t = _traj(patch="diff --git a b", eval_details={"reason": "tests_failed"},
+              stop_reason="max_steps")
+    _steps(t, [(ActionType.RUN_TESTS.value, "")] * 8)
+    assert classify(t) == FailureMode.LIVELOCK
+
+
+def test_repetition_ratio_on_empty_trajectory():
+    from agenteval.failure_taxonomy import repetition_ratio
+
+    assert repetition_ratio(_traj()) == 0.0

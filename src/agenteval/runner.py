@@ -161,3 +161,55 @@ def headroom_warnings(m: RunMetrics) -> list[str]:
             "Fix the tier or the step budget before spending a sweep on it."
         )
     return notes
+
+
+def reclassify(run_names: list[str], *, output_dir: str = "results") -> None:
+    """Re-apply the current failure taxonomy to already-saved trajectories.
+
+    Refining how failures are classified is analysis, not measurement — the
+    rollouts are unchanged, so re-running the model to see a new label would be
+    pure waste. Only the mode fields are rewritten; solve rate, token counts and
+    timings are left exactly as recorded, since the trajectories on disk are the
+    best attempt per task and cannot reconstruct best-of-N totals.
+    """
+    import json as _json
+    from collections import Counter as _Counter
+
+    base = Path(output_dir)
+    dirs = [base / n for n in run_names] if run_names else sorted(
+        p for p in base.iterdir() if p.is_dir() and (p / "trajectories").is_dir()
+    )
+
+    for d in dirs:
+        traj_dir = d / "trajectories"
+        metrics_path = d / "metrics.json"
+        if not traj_dir.is_dir() or not metrics_path.exists():
+            console.print(f"[yellow]skip[/] {d.name}: no saved trajectories")
+            continue
+
+        modes: dict[str, str] = {}
+        for path in sorted(traj_dir.glob("*.json")):
+            data = _json.loads(path.read_text())
+            traj = Trajectory.from_dict(data)
+            annotate(traj)
+            modes[traj.task_id] = traj.failure_mode
+            data["failure_mode"] = traj.failure_mode
+            path.write_text(_json.dumps(data, indent=2))
+
+        metrics = _json.loads(metrics_path.read_text())
+        before = metrics.get("failure_breakdown", {})
+        after = dict(_Counter(modes.values()))
+        metrics["failure_breakdown"] = after
+        metrics["task_modes"] = modes
+        metrics_path.write_text(_json.dumps(metrics, indent=2))
+
+        changed = {
+            mode: (before.get(mode, 0), after.get(mode, 0))
+            for mode in sorted(set(before) | set(after))
+            if before.get(mode, 0) != after.get(mode, 0)
+        }
+        if changed:
+            summary = ", ".join(f"{m} {a}->{b}" for m, (a, b) in changed.items())
+            console.print(f"[green]{d.name}[/]: {summary}")
+        else:
+            console.print(f"[dim]{d.name}: unchanged[/]")

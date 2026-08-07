@@ -71,3 +71,20 @@ class Trajectory:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Trajectory":
+        """Rebuild a trajectory from its persisted form.
+
+        Lets the taxonomy be re-applied to completed runs, so refining how
+        failures are classified does not require re-running the model. The
+        derived aggregates in `to_dict` are recomputed from the steps rather
+        than read back.
+        """
+        fields = {f for f in cls.__dataclass_fields__ if f != "steps"}
+        traj = cls(**{k: v for k, v in data.items() if k in fields})
+        traj.steps = [
+            Step(**{k: v for k, v in step.items() if k in Step.__dataclass_fields__})
+            for step in data.get("steps", [])
+        ]
+        return traj
