@@ -173,7 +173,9 @@ def run_study(tasks, chat, model_name, out_path, *, workers=16,
     """
     done = _completed_keys(out_path)
     todo = [t for t in tasks if (t.task_id, model_name) not in done]
-    print(f"{model_name}: {len(todo)} tasks to run, {len(done)} already on disk")
+    mine = sum(1 for _, m in done if m == model_name)
+    print(f"{model_name}: {len(todo)} tasks to run, {mine} already on disk "
+          f"({len(done)} across all models)")
 
     lock = threading.Lock()
     start = time.time()
