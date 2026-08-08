@@ -327,36 +327,7 @@ print("\\nall models attempted")
 
 CELL_ANALYSERS = (Path(__file__).parent / "cells" / "analysers.py").read_text()
 
-CELL_SUMMARY = '''\
-# --- Verdict. ---
-import json as _json
-
-print(f"{'family':10s} {'model':22s} {'ok':4s} {'load':6s} {'tok/s':7s} {'GPU MiB':8s} note")
-for r in results:
-    print(f"{r['family']:10s} {r['model']:22s} "
-          f"{'yes' if r['loaded'] else 'NO':4s} "
-          f"{str(r.get('load_min', '-')):6s} "
-          f"{str(r.get('completion_tok_s', '-')):7s} "
-          f"{str(r.get('peak_gpu_mb', '-')):8s} {r['note'][:60]}")
-
-ok = [r for r in results if r["loaded"]]
-print(f"\\n{len(ok)}/{len(results)} models usable")
-
-if ok:
-    slowest = min(r["completion_tok_s"] for r in ok)
-    # A repair-loop sample is roughly 3 rounds x ~400 completion tokens.
-    per_sample = 3 * 400
-    per_hour = slowest * 3600 / per_sample
-    print(f"Slowest usable model: {slowest} completion tok/s")
-    print(f"  ~= {per_hour:,.0f} repair-loop samples per GPU-hour at that rate")
-    print(f"  so 20 usable hours is on the order of {per_hour * 20:,.0f} samples")
-    print("\\nIf that number is in the tens of thousands, sample size stops being "
-          "the binding constraint, which is the whole point of this design.")
-
-with open("/kaggle/working/smoke_results.json", "w") as fh:
-    _json.dump(results, fh, indent=2)
-print("\\nWrote /kaggle/working/smoke_results.json")
-'''
+CELL_SUMMARY = (Path(__file__).parent / "cells" / "summary.py").read_text()
 
 CELL_SHUTDOWN = '''\
 # --- Emergency shutdown, if a cell was interrupted and the port is stuck. ---
