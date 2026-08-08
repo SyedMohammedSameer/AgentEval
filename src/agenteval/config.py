@@ -46,6 +46,18 @@ class AgentConfig:
     # --- self-verification / retry (ablation lever) ---
     self_check: bool = True             # let the agent inspect test output before submitting
     attempts: int = 1                   # best-of-N independent attempts (pass@k style)
+    # How a multi-attempt run picks which attempt counts. This is the difference
+    # between an upper bound and a shippable result, so it is an explicit lever:
+    #   "oracle"    - the hidden tests choose the winner. This is pass@k: it answers
+    #                 "could the agent have solved it?", and no deployed system can
+    #                 reach it, because in production nothing reveals which attempt
+    #                 worked.
+    #   "dev_tests" - the visible tests choose the winner, exactly as a real
+    #                 retry loop would. Lower by construction, and the honest
+    #                 number to quote for "retries are worth X".
+    # The gap between them measures how much of best-of-N depends on having a
+    # perfect verifier rather than on generating a correct patch at all.
+    selection: str = "oracle"           # "oracle" | "dev_tests"
 
 
 @dataclass

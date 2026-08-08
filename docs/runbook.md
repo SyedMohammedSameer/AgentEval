@@ -186,7 +186,15 @@ the harness itself without paying for a full sweep.
 | `no_repo_map` | removes the repo file listing from context | `baseline` |
 | `windowed_history` | keeps only the last 8 turns | `baseline` |
 | `sampling_control` | temperature 0.8, one attempt | `baseline` |
-| `best_of_3` | temperature 0.8, three attempts | `sampling_control` |
+| `best_of_3` | three attempts, hidden tests pick the winner | `sampling_control` |
+| `best_of_3_dev` | three attempts, visible tests pick the winner | `sampling_control` |
+
+`best_of_3` is **pass@3**: the oracle chooses which attempt counts. It answers "could
+the agent have solved this?" and is an upper bound no deployed system reaches, because
+in production nothing tells you which of the three attempts was right. `best_of_3_dev`
+uses the selection signal a real retry loop actually has — the agent's own visible
+tests. Report the second as the value of retries; the gap between them is how much of
+the gain rests on having a perfect verifier.
 
 `best_of_3` is compared against `sampling_control`, not `baseline`. Multi-sampling
 needs temperature > 0 to draw distinct rollouts, so it differs from the temperature-0

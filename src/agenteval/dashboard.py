@@ -229,11 +229,12 @@ _COND_LABEL = {
     "no_repo_map": "− repo map (context)",
     "windowed_history": "windowed history",
     "sampling_control": "sampling control (T>0)",
-    "best_of_3": "best-of-3 (retry)",
+    "best_of_3": "best-of-3 (pass@3, oracle-selected)",
+    "best_of_3_dev": "best-of-3 (visible-test selected)",
 }
 _COND_ORDER = [
     "baseline", "no_test_tool", "no_repo_map",
-    "windowed_history", "sampling_control", "best_of_3",
+    "windowed_history", "sampling_control", "best_of_3", "best_of_3_dev",
 ]
 
 
