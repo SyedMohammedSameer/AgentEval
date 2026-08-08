@@ -92,6 +92,13 @@ for model in MODELS:
         first = text.strip().splitlines()[0][:90] if text.strip() else "(empty)"
         print(f"  template OK, code block: {row['has_code_block']}   first line: {first}")
 
+        # Warm up and discard. The first batch absorbs CUDA graph capture and
+        # cache warmup, which lands entirely on whichever sweep point runs first
+        # and makes it look catastrophically slow. Measured on Qwen: 29 tok/s at
+        # concurrency 8 followed by 293 at concurrency 16, purely from warmup.
+        print("  warming up (discarded)...", flush=True)
+        timed_batch(model, min(CONCURRENCY_SWEEP))
+
         # Sweep concurrency to find where throughput stops climbing.
         sweep = []
         for c in CONCURRENCY_SWEEP:

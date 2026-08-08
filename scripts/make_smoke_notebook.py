@@ -125,7 +125,10 @@ MODELS = [
 TP = min(2, N_GPUS)        # 7-9B at float16 does not fit one 16GB card
 MAX_MODEL_LEN = 8192       # ample for the smoke prompts; the real run sets its own
 GPU_MEM_FRACTION = 0.90
-CONCURRENCY_SWEEP = [8, 16, 32, 64]   # find where throughput stops climbing
+# Measured on 2x T4: all four models were still gaining throughput at 64, so
+# the sweep, not the hardware, was the limit. Extended upward to find the
+# real ceiling. The first point is preceded by a discarded warmup batch.
+CONCURRENCY_SWEEP = [16, 32, 64, 128, 256]
 MAX_NUM_SEQS = max(CONCURRENCY_SWEEP)  # server must accept the widest point
 GEN_TOKENS = 256
 LOG_DIR = "/kaggle/working/smoke-logs"
