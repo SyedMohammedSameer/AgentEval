@@ -113,10 +113,11 @@ table can be computed on the tasks all of them reached.
 | `02_analyser_selection` | CPU | density and overlap across nine analyser configs |
 | `03_study` | 2x T4 | the run, hard-capped at 3h, checkpointed and resumable |
 
-`03_study` carries a byte-for-byte copy of `agentverif/` rather than a second
-implementation, and prints each module's sha256 so it can be checked against the
-repository. Its only job is orchestration and printing; every measurement is made
-by code with tests.
+`03_study` clones this repository rather than carrying a copy of it, and records
+the commit sha in its run manifest, so a result can be traced back to the exact
+code that produced it. Its only job is orchestration and printing; every
+measurement is made by code with tests. All four notebooks are generated from the
+plain Python cell sources under `scripts/cells/`.
 
 ## Status
 

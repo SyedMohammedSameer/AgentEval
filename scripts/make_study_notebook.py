@@ -2,10 +2,10 @@
 
     python scripts/make_study_notebook.py
 
-Generated rather than hand-written for two reasons. The JSON is always valid, and
-the notebook carries a byte-for-byte copy of the `agentverif` package rather than
-a second, drifting implementation of it. Every measurement the notebook makes is
-made by code that has tests: the notebook itself is orchestration and printing.
+Generated rather than hand-written so the JSON is always valid and the cell sources
+stay reviewable as ordinary Python under `scripts/cells/`. The notebook clones this
+repository rather than carrying a copy of it, so every measurement it makes is made
+by code that has tests; the notebook itself is orchestration and printing.
 
 Its shape follows what the earlier notebooks settled. `00_smoke_test` measured
 throughput and confirmed all four models load on 2x T4; `01_corpus_check` confirmed
@@ -16,15 +16,12 @@ configurations and chose ruff, bandit and pylint on that evidence.
 
 from __future__ import annotations
 
-import base64
 import json
-import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "notebooks" / "03_study.ipynb"
 CELLS = Path(__file__).resolve().parent / "cells"
-PKG = ROOT / "agentverif"
 
 
 MD_INTRO = """\
@@ -311,45 +308,6 @@ another GPU hour.
 """
 
 
-def package_cell() -> str:
-    """A cell that writes the tested package to disk, verbatim.
-
-    Carried as compressed base64 rather than pasted source: the notebook stays
-    valid JSON regardless of what quoting the modules use, and there is no second
-    copy of the logic to drift out of step with the tests. The digests printed
-    match `sha256sum agentverif/*.py` in the repository.
-    """
-    entries = []
-    for path in sorted(PKG.glob("*.py")):
-        blob = base64.b64encode(zlib.compress(path.read_bytes(), 9)).decode()
-        chunks = [blob[i:i + 88] for i in range(0, len(blob), 88)]
-        body = "\n".join(f'        "{c}"' for c in chunks)
-        entries.append(f'    "{path.name}":\n{body},')
-    table = "\n".join(entries)
-    return (
-        "# --- The tested package, written to disk verbatim. ---\n"
-        "# Byte-for-byte copies of agentverif/*.py from the repository, carried as\n"
-        "# compressed base64 so the notebook stays valid JSON whatever quoting the\n"
-        "# sources use, and so the notebook cannot drift into being a second\n"
-        "# implementation of logic that only the repository copy has tests for.\n"
-        "# The printed digests match `sha256sum agentverif/*.py` in the repo.\n"
-        "import base64, hashlib, pathlib, zlib\n\n"
-        f"_PKG = {{\n{table}\n}}\n\n"
-        'SRC_ROOT = pathlib.Path("/kaggle/working/src")\n'
-        '_pkg_dir = SRC_ROOT / "agentverif"\n'
-        "_pkg_dir.mkdir(parents=True, exist_ok=True)\n"
-        "for _name, _b64 in _PKG.items():\n"
-        "    _data = zlib.decompress(base64.b64decode(_b64))\n"
-        "    (_pkg_dir / _name).write_bytes(_data)\n"
-        '    print(f"  {_name:16s} {len(_data):>6d} bytes  '
-        'sha256 {hashlib.sha256(_data).hexdigest()[:16]}")\n\n'
-        "if str(SRC_ROOT) not in sys.path:\n"
-        "    sys.path.insert(0, str(SRC_ROOT))\n"
-        "import agentverif.report, agentverif.study\n"
-        'print("\\nagentverif importable from", SRC_ROOT)\n'
-    )
-
-
 def code(src: str) -> dict:
     return {"cell_type": "code", "execution_count": None, "metadata": {},
             "outputs": [], "source": src.splitlines(keepends=True)}
@@ -370,7 +328,7 @@ def build() -> dict:
             md(MD_INTRO),
             md("## 1. Accelerator"), code(CELL_GPU),
             md("## 2. Install"), code(CELL_INSTALL),
-            md("## 3. The tested package"), code(package_cell()),
+            md("## 3. The tested package"), code(cell_file("study_package.py")),
             md("## 4. Configuration"), code(cell_file("study_config.py")),
             md("## 5. Server helpers"), code(CELL_SERVER),
             md("## 6. Corpus"), code(cell_file("study_corpus.py")),

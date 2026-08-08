@@ -70,7 +70,8 @@ for r in runs:
           f"{r.get('tasks', 0):>7} {r.get('steps', 0):>7} {r.get('errors', 0):>7}")
 
 with open(os.path.join(OUT_DIR, "run_manifest.json"), "w") as fh:
-    json.dump({"seed": SEED, "n_tasks": N_TASKS, "temperature": TEMPERATURE,
+    json.dump({"commit": COMMIT, "branch": BRANCH,
+               "seed": SEED, "n_tasks": N_TASKS, "temperature": TEMPERATURE,
                "max_gen_tokens": MAX_GEN_TOKENS, "workers": WORKERS,
                "tensor_parallel": TP, "dtype": "float16",
                "analyser_versions": TOOL_VERSIONS,
