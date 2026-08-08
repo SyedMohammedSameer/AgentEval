@@ -27,6 +27,34 @@ if not measured:
     print("models failing the same way is usually one environment problem, not four")
     print("model problems.")
 else:
+    print("\n--- GPU usage ---")
+    for r in measured:
+        gpus = "  ".join(f"gpu{i}:{v['mean_util_pct']}%"
+                         for i, v in sorted(r.get("per_gpu", {}).items()))
+        flags = []
+        if not r.get("gpu_balanced", True):
+            flags.append("IMBALANCED")
+        if not r.get("saturated", True):
+            flags.append("still climbing at top of sweep")
+        if r.get("min_gpu_util", 100) < 50:
+            flags.append("a card is mostly idle")
+        print(f"  {r['model']:22s} best concurrency {r.get('best_concurrency', '-'):>3}  "
+              f"{gpus}  {'; '.join(flags)}")
+
+    unsaturated = [r for r in measured if not r.get("saturated", True)]
+    if unsaturated:
+        print("\n  Throughput was still rising at the widest concurrency tested, so the")
+        print("  sweep was the limit rather than the hardware. The real study should")
+        print("  push concurrency past the top of this sweep and re-measure.")
+
+    idle = [r for r in measured if r.get("min_gpu_util", 100) < 50]
+    if idle:
+        print("\n  At least one card sat below 50% on: "
+              + ", ".join(r["model"] for r in idle))
+        print("  Tensor parallelism is required here for memory reasons, but if a card")
+        print("  is idle the split is not paying for its all-reduce cost. Worth")
+        print("  comparing against two single-GPU servers on quantised weights.")
+
     slowest = min(r["completion_tok_s"] for r in measured)
     fastest = max(r["completion_tok_s"] for r in measured)
     # A repair-loop sample is roughly three rounds of ~400 completion tokens.

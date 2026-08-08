@@ -125,7 +125,8 @@ MODELS = [
 TP = min(2, N_GPUS)        # 7-9B at float16 does not fit one 16GB card
 MAX_MODEL_LEN = 8192       # ample for the smoke prompts; the real run sets its own
 GPU_MEM_FRACTION = 0.90
-BATCH = 32                 # concurrent requests, to measure batched throughput
+CONCURRENCY_SWEEP = [8, 16, 32, 64]   # find where throughput stops climbing
+MAX_NUM_SEQS = max(CONCURRENCY_SWEEP)  # server must accept the widest point
 GEN_TOKENS = 256
 LOG_DIR = "/kaggle/working/smoke-logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -139,7 +140,7 @@ PROMPT = (
     "block, no explanation."
 )
 
-print(f"{len(MODELS)} models, tensor-parallel {TP}, batch {BATCH}")
+print(f"{len(MODELS)} models, tensor-parallel {TP}, concurrency sweep {CONCURRENCY_SWEEP}")
 for m in MODELS:
     print(f"  {m['family']:10s} {m['hf']}")
 '''
@@ -174,7 +175,7 @@ def _cmd(model, extras=True):
         "--gpu-memory-utilization", str(GPU_MEM_FRACTION),
         "--tensor-parallel-size", str(TP),
     ]
-    return required + (["--max-num-seqs", str(BATCH), "--disable-log-requests"]
+    return required + (["--max-num-seqs", str(MAX_NUM_SEQS), "--disable-log-requests"]
                        if extras else [])
 
 
@@ -252,78 +253,7 @@ def peak_gpu_mb():
 print("helpers ready")
 '''
 
-CELL_RUN = '''\
-# --- Load each model, measure it, shut it down. ---
-from concurrent.futures import ThreadPoolExecutor
-
-results = []
-
-for model in MODELS:
-    print("\\n" + "=" * 70)
-    print(f"{model['family']}: {model['hf']}")
-    print("=" * 70, flush=True)
-
-    row = {"family": model["family"], "model": model["short"], "hf": model["hf"],
-           "loaded": False, "note": ""}
-    proc = None
-    t0 = time.time()
-    try:
-        proc, log_path = start_server(model)
-        row["loaded"] = True
-        row["load_min"] = round((time.time() - t0) / 60, 1)
-
-        # 1. Architecture and template, straight from the server's own log.
-        log = open(log_path).read()
-        for key in ("architectures", "Chat template", "chat_template"):
-            for line in log.splitlines():
-                if key in line:
-                    row.setdefault("log_notes", []).append(line.strip()[:160])
-                    break
-
-        # 2. One completion, kept verbatim. The point is to see whether the
-        #    model's native template produced usable code, not to score it.
-        single = _post("/chat/completions", {
-            "model": model["short"],
-            "messages": [{"role": "user", "content": PROMPT}],
-            "max_tokens": GEN_TOKENS, "temperature": 0.0})
-        text = single["choices"][0]["message"]["content"]
-        row["sample"] = text
-        row["has_code_block"] = "```" in text
-        row["mentions_subprocess"] = "subprocess" in text
-        print(f"  sample ({len(text)} chars), code block: {row['has_code_block']}")
-        print("  " + text.strip().splitlines()[0][:100] if text.strip() else "  (empty)")
-
-        # 3. Batched throughput. This number sets the budget for the real study,
-        #    so it is measured concurrently rather than one request at a time.
-        def one(i):
-            return _post("/chat/completions", {
-                "model": model["short"],
-                "messages": [{"role": "user", "content": PROMPT}],
-                "max_tokens": GEN_TOKENS, "temperature": 0.8, "seed": i})
-
-        t1 = time.time()
-        with ThreadPoolExecutor(max_workers=BATCH) as pool:
-            outs = list(pool.map(one, range(BATCH)))
-        elapsed = time.time() - t1
-        completion_tokens = sum(o["usage"]["completion_tokens"] for o in outs)
-        row["batch_secs"] = round(elapsed, 1)
-        row["completion_tok_s"] = round(completion_tokens / elapsed)
-        row["peak_gpu_mb"] = peak_gpu_mb()
-        print(f"  {BATCH} completions in {elapsed:.1f}s "
-              f"= {row['completion_tok_s']} completion tok/s")
-        print(f"  peak GPU memory across cards: {row['peak_gpu_mb']} MiB")
-
-    except Exception as exc:
-        row["note"] = f"{type(exc).__name__}: {exc}"
-        print(f"  FAILED: {row['note']}"[:800])
-    finally:
-        stop_server(proc)
-        free_weights(model)
-
-    results.append(row)
-
-print("\\nall models attempted")
-'''
+CELL_RUN = (Path(__file__).parent / "cells" / "measure.py").read_text()
 
 CELL_ANALYSERS = (Path(__file__).parent / "cells" / "analysers.py").read_text()
 
