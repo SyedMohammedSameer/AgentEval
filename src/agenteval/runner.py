@@ -24,26 +24,66 @@ from .trajectory import Trajectory
 console = Console()
 
 
-def _run_task(agent: Agent, provider, task: Task, attempts: int) -> tuple[Trajectory, list[Trajectory]]:
-    """Run up to `attempts` rollouts; stop early once resolved. Returns (best, all)."""
+def _visible_tests_pass(task: Task, env) -> bool:
+    """Would the agent's own visible tests accept this attempt?
+
+    The selection signal a deployed retry loop actually has. Run before teardown,
+    against the workspace the agent just edited.
+    """
+    if not task.dev_test_cmd:
+        # Nothing to select on; accept the attempt rather than silently discard it.
+        return True
+    try:
+        return env.exec(task.dev_test_cmd, timeout=120).exit_code == 0
+    except Exception:  # noqa: BLE001 — a broken suite is a rejection, not a crash
+        return False
+
+
+def _run_task(
+    agent: Agent, provider, task: Task, attempts: int, selection: str = "oracle"
+) -> tuple[Trajectory, list[Trajectory]]:
+    """Run up to `attempts` rollouts and pick one. Returns (best, all).
+
+    Which attempt is picked is the whole question for best-of-N. Under "oracle"
+    the hidden tests decide, giving pass@k — an upper bound no deployed system
+    reaches, since production never reveals which attempt succeeded. Under
+    "dev_tests" the visible tests decide, which is what a real retry loop can do
+    and therefore the number worth quoting.
+    """
     all_attempts: list[Trajectory] = []
     best: Trajectory | None = None
+
     for attempt in range(attempts):
         env = provider.make_environment(task)
-        try:
-            traj = agent.rollout(task, env, attempt)
-        finally:
-            pass
+        traj = agent.rollout(task, env, attempt)
+
+        # Selection signal must be gathered before the workspace is torn down.
+        accepted = True
+        if selection == "dev_tests" and attempts > 1:
+            accepted = _visible_tests_pass(task, env)
+
         ev = provider.evaluate(task, traj.patch)
         traj.resolved = ev.resolved
         traj.eval_details = ev.details
         annotate(traj)
         env.teardown()
         all_attempts.append(traj)
-        if best is None or (traj.resolved and not best.resolved):
-            best = traj
-        if traj.resolved:
-            break
+
+        if selection == "dev_tests":
+            # Keep the first attempt the visible tests accept. Whether that
+            # attempt actually passes the hidden oracle is precisely what the
+            # condition measures, so it is not second-guessed here.
+            if best is None:
+                best = traj
+            if accepted:
+                best = traj
+                break
+        else:
+            if best is None or (traj.resolved and not best.resolved):
+                best = traj
+            if traj.resolved:
+                break
+
     return best, all_attempts  # type: ignore[return-value]
 
 
@@ -69,7 +109,9 @@ def run(cfg: RunConfig) -> RunMetrics:
 
     for i, task in enumerate(tasks, 1):
         console.print(f"[cyan]({i}/{len(tasks)})[/] {task.task_id} ...", end=" ")
-        best, attempts = _run_task(agent, provider, task, cfg.agent.attempts)
+        best, attempts = _run_task(
+            agent, provider, task, cfg.agent.attempts, cfg.agent.selection
+        )
         best_per_task.append(best)
         every_attempt.extend(attempts)
 

@@ -17,6 +17,15 @@ comparing it to `baseline` instead would confound retries with sampling temperat
 from a noisy process. Seeds do not add independent evidence about an effect (tasks
 do — see `stats.required_tasks`), but they do stop a single unlucky rollout from
 becoming a published number.
+
+**Best-of-N is measured twice, because how the winner is chosen changes what the
+number means.** `best_of_3` lets the hidden tests pick the winning attempt — that is
+pass@3, an upper bound that answers "could the agent have solved this?" and that no
+deployed system reaches, since production never reveals which attempt worked.
+`best_of_3_dev` lets the agent's own visible tests pick, which is what a real retry
+loop can do. The gap between them is the share of the apparent gain that comes from
+having a perfect verifier rather than from generating a correct patch, and quoting
+the first as "retries are worth X points" overstates the lever by exactly that gap.
 """
 
 from __future__ import annotations
@@ -60,7 +69,12 @@ SUITES: dict[str, list[tuple[str, dict, dict, str]]] = {
         ("windowed_history", {"history_strategy": "windowed", "history_window": 8}, {}, "baseline"),
         # --- retry / pass@k. Control first so the pair reads in order. ---
         ("sampling_control", {}, {"temperature": SAMPLING_TEMPERATURE}, "baseline"),
-        ("best_of_3", {"attempts": 3}, {"temperature": SAMPLING_TEMPERATURE}, "sampling_control"),
+        # pass@3: the hidden tests pick the winner. An upper bound, not a strategy.
+        ("best_of_3", {"attempts": 3, "selection": "oracle"},
+         {"temperature": SAMPLING_TEMPERATURE}, "sampling_control"),
+        # The deployable version: the agent's own visible tests pick the winner.
+        ("best_of_3_dev", {"attempts": 3, "selection": "dev_tests"},
+         {"temperature": SAMPLING_TEMPERATURE}, "sampling_control"),
     ],
 }
 
