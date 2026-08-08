@@ -114,147 +114,6 @@ N_GPUS = len(gpus)
 print(f"\\nOK: {N_GPUS} GPU(s), compute capability {caps or 'unknown'}")
 '''
 
-CELL_INSTALL = '''\
-# --- Install. ~5-10 min, mostly vLLM's dependencies. ---
-# vLLM is only ever launched as a subprocess, so this kernel never imports torch
-# and no kernel restart is needed.
-import os
-
-def sh(cmd, check=True):
-    print(f"$ {cmd}")
-    r = subprocess.run(cmd, shell=True, text=True)
-    if check and r.returncode != 0:
-        raise SystemExit(f"failed ({r.returncode}): {cmd}")
-    return r.returncode
-
-sh("pip install -q -U vllm")
-sh("pip install -q -U datasets")
-# The analysers whose findings are the measurement.
-sh("pip install -q ruff bandit pylint")
-
-# Findings depend on tool versions, so the versions are part of the result and
-# get recorded rather than assumed.
-TOOL_VERSIONS = {}
-for tool in ("ruff", "bandit", "pylint"):
-    r = subprocess.run(f"{tool} --version", shell=True, capture_output=True, text=True)
-    out = (r.stdout or r.stderr or "?").strip().splitlines()
-    TOOL_VERSIONS[tool] = out[0] if out else "?"
-TOOL_VERSIONS["python"] = sys.version.split()[0]
-print("\\nversions:", TOOL_VERSIONS)
-
-# Weights must not land in /kaggle/working: that is the saved output and is
-# size-capped. Scratch instead.
-HF_CACHE = "/kaggle/temp/hf" if os.path.isdir("/kaggle/temp") else "/tmp/hf"
-os.makedirs(HF_CACHE, exist_ok=True)
-os.environ["HF_HOME"] = HF_CACHE
-print("HF cache:", HF_CACHE)
-'''
-
-CELL_SERVER = '''\
-# --- vLLM lifecycle: launch, wait until it truly answers, shut down. ---
-import json, signal, socket, time, urllib.request
-
-_json = json
-PORT = 8000
-BASE_URL = f"http://127.0.0.1:{PORT}/v1"
-
-
-def _port_free(port=PORT):
-    with socket.socket() as s:
-        return s.connect_ex(("127.0.0.1", port)) != 0
-
-
-def _cmd(model, extras=True):
-    """Required args, plus tuning flags worth retrying without.
-
-    Every optional flag has been renamed or dropped in some vLLM release, and a
-    three-hour run should not die because a tuning knob moved.
-    """
-    required = [
-        sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-        "--model", model["hf"],
-        "--served-model-name", model["short"],
-        "--host", "127.0.0.1", "--port", str(PORT),
-        # T4 has no bfloat16; several of these configs request it by default.
-        "--dtype", "float16",
-        "--max-model-len", str(MAX_MODEL_LEN),
-        "--gpu-memory-utilization", str(GPU_MEM_FRACTION),
-        "--tensor-parallel-size", str(TP),
-    ]
-    return required + (["--max-num-seqs", str(MAX_NUM_SEQS), "--disable-log-requests"]
-                       if extras else [])
-
-
-def _post(path, payload, timeout=600):
-    req = urllib.request.Request(
-        f"{BASE_URL}{path}", data=_json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return _json.loads(r.read())
-
-
-def start_server(model, timeout_s=2400, extras=True):
-    """Ready means 'returned a completion', not '/health answered'.
-
-    The endpoint accepts connections before weights finish loading, so health
-    alone would let a run start early and fail every request at once.
-    """
-    if not _port_free():
-        raise RuntimeError("port 8000 in use; run the shutdown cell")
-
-    log_path = os.path.join(LOG_DIR, f"{model['short']}.log")
-    log = open(log_path, "w")
-    proc = subprocess.Popen(_cmd(model, extras), stdout=log,
-                            stderr=subprocess.STDOUT, preexec_fn=os.setsid,
-                            env=os.environ.copy())
-    started = time.time()
-    while True:
-        if proc.poll() is not None:
-            log.flush()
-            tail = open(log_path).read()[-4000:]
-            if extras and ("unrecognized arguments" in tail or "invalid choice" in tail):
-                print("  optional flag rejected; retrying with required args only")
-                return start_server(model, timeout_s, extras=False)
-            raise RuntimeError(f"vLLM exited {proc.returncode}\\n--- log tail ---\\n{tail}")
-        try:
-            _post("/chat/completions", {"model": model["short"],
-                                        "messages": [{"role": "user", "content": "ping"}],
-                                        "max_tokens": 1}, timeout=20)
-            print(f"  ready in {(time.time() - started) / 60:.1f} min")
-            return proc, log_path
-        except Exception:
-            pass
-        if time.time() - started > timeout_s:
-            stop_server(proc)
-            raise RuntimeError(f"not ready in {timeout_s}s\\n{open(log_path).read()[-4000:]}")
-        time.sleep(5)
-
-
-def stop_server(proc):
-    if proc is None or proc.poll() is not None:
-        return
-    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    try:
-        proc.wait(timeout=90)
-    except subprocess.TimeoutExpired:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        proc.wait(timeout=30)
-    time.sleep(5)   # let the GPUs actually free before the next load
-
-
-def free_weights(model):
-    """~15GB per model; the scratch disk does not hold four."""
-    import shutil
-    slug = "models--" + model["hf"].replace("/", "--")
-    for root in (os.path.join(HF_CACHE, "hub"), HF_CACHE):
-        p = os.path.join(root, slug)
-        if os.path.isdir(p):
-            shutil.rmtree(p, ignore_errors=True)
-
-
-print("helpers ready")
-'''
-
 CELL_SHUTDOWN = '''\
 # --- Emergency shutdown, if a cell was interrupted and the port is stuck. ---
 subprocess.run("pkill -f vllm.entrypoints.openai.api_server", shell=True)
@@ -327,10 +186,10 @@ def build() -> dict:
         "cells": [
             md(MD_INTRO),
             md("## 1. Accelerator"), code(CELL_GPU),
-            md("## 2. Install"), code(CELL_INSTALL),
+            md("## 2. Install"), code(cell_file("study_install.py")),
             md("## 3. The tested package"), code(cell_file("study_package.py")),
             md("## 4. Configuration"), code(cell_file("study_config.py")),
-            md("## 5. Server helpers"), code(CELL_SERVER),
+            md("## 5. Server helpers"), code(cell_file("study_server.py")),
             md("## 6. Corpus"), code(cell_file("study_corpus.py")),
             md("## 7. Instrument check"), code(cell_file("study_instrument.py")),
             md("## 8. Run"), code(cell_file("study_run.py")),

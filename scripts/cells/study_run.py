@@ -50,12 +50,36 @@ for i, model in enumerate(MODELS):
     proc = None
     try:
         load_started = time.time()
-        proc, log_path = start_server(model)
+        try:
+            proc, log_path = start_server(model)
+        except Exception as exc:
+            # A server that will not start is an environment problem, not a model
+            # problem, and the remaining models will hit it identically. Marching
+            # all four into the same wall wastes the session and buries the one
+            # error worth reading, so the sweep stops here unless something has
+            # already served, which would make this model the odd one out.
+            print(f"  SERVER FAILED TO START: {exc}")
+            runs.append({**model, "status": "failed: no_server", "tasks": 0})
+            if not any(r["status"] == "ok" for r in runs):
+                raise SystemExit(
+                    "\nThe first model did not load, so the remaining "
+                    f"{len(MODELS) - i - 1} would fail the same way and the sweep "
+                    "is stopping instead.\n\nThis is the environment, not the "
+                    "study: fix it and re-run this cell, which resumes from "
+                    f"{STEPS_PATH} rather than starting over.\n"
+                    "The engine-core error is printed above; full logs in "
+                    f"{LOG_DIR}."
+                )
+            continue
+
         load_min = (time.time() - load_started) / 60
         counters = run_study(TASKS, make_chat(model), model["short"], STEPS_PATH,
                             workers=WORKERS, time_budget_s=budget)
         runs.append({**model, "status": "ok", "load_min": round(load_min, 1),
                      **counters})
+    except SystemExit:
+        stop_server(proc)
+        raise
     except Exception as exc:
         print(f"  FAILED: {type(exc).__name__}: {exc}")
         runs.append({**model, "status": f"failed: {type(exc).__name__}", "tasks": 0})
