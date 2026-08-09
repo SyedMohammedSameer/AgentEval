@@ -5,7 +5,7 @@
 # review rather than to a copy living inside this file.
 REPO = "https://github.com/SyedMohammedSameer/AgentEval.git"
 BRANCH = "claude/project-recall-m7l4nj"
-SRC_ROOT = "/kaggle/working/AgentEval"
+SRC_ROOT = os.path.join(WORK_ROOT, "AgentEval")
 
 if os.path.isdir(os.path.join(SRC_ROOT, ".git")):
     sh(f"git -C {SRC_ROOT} fetch --depth 1 origin {BRANCH}")

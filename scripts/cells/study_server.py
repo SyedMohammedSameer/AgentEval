@@ -9,17 +9,17 @@ BASE_URL = f"http://127.0.0.1:{PORT}/v1"
 # deadlock a tensor-parallel worker. Spawn costs a few seconds per launch.
 os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
 
-# Tried in order until one serves. Level 0 is the fast path. Level 1 turns off the
-# two things most likely to break tensor-parallel on a pair of T4s, which have no
-# NVLink and no peer-to-peer: CUDA graph capture and the custom all-reduce kernel.
-# Level 2 halves the context as well, which is what an engine-core failure looks
-# like when it is really KV-cache pressure. One model failing to load while
-# another loads fine on the same machine is model-specific, so it is worth three
-# cheap attempts before moving on.
+# Tried in order until one serves. Level 0 is the fast path. Level 1 drops CUDA
+# graph capture, and on a multi-GPU host the custom all-reduce kernel too, since
+# cards without NVLink or peer-to-peer are where collectives break. Level 2 halves
+# the context as well, which is what an engine-core failure looks like when it is
+# really KV-cache pressure. One model failing to load while another loads fine on
+# the same machine is model-specific, so it is worth three cheap attempts.
+_MULTI = ["--disable-custom-all-reduce"] if TP > 1 else []
 LAUNCH_LADDER = [
     ("default", [], None),
-    ("eager+no-custom-allreduce", ["--enforce-eager", "--disable-custom-all-reduce"], None),
-    ("eager+4k-context", ["--enforce-eager", "--disable-custom-all-reduce"], 4096),
+    ("eager", ["--enforce-eager"] + _MULTI, None),
+    ("eager+half-context", ["--enforce-eager"] + _MULTI, MAX_MODEL_LEN // 2),
 ]
 LAUNCH_TIMEOUT_S = 1200      # a model that has not loaded in 20 min will not
 
@@ -39,8 +39,9 @@ def _cmd(model, rung):
         "--model", model["hf"],
         "--served-model-name", model["short"],
         "--host", "127.0.0.1", "--port", str(PORT),
-        # T4 has no bfloat16; several of these configs request it by default.
-        "--dtype", "float16",
+        # Measured in section 1: bfloat16 on Ampere and later, float16 on Turing,
+        # which has no bfloat16 at all and hard-fails if asked for it.
+        "--dtype", DTYPE,
         "--max-model-len", str(ctx or MAX_MODEL_LEN),
         "--gpu-memory-utilization", str(GPU_MEM_FRACTION),
         "--tensor-parallel-size", str(TP),
