@@ -40,14 +40,54 @@ _m = re.search(r"CUDA Version:\s*(\d+)\.(\d+)", _smi_text)
 DRIVER_CUDA = (int(_m.group(1)), int(_m.group(2))) if _m else (0, 0)
 print(f"platform: {PLATFORM} | driver supports CUDA {DRIVER_CUDA[0]}.{DRIVER_CUDA[1]}")
 
+def available_vllm_versions():
+    """Every vLLM release PyPI actually has, newest first.
+
+    Asking beats guessing: a hardcoded `vllm==0.11.2` that was never published
+    spends a whole install attempt discovering the version does not exist.
+    """
+    out = ""
+    for cmd in (f"{sys.executable} -m pip index versions vllm",
+                f"{sys.executable} -m pip install 'vllm==' "):
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        out = (r.stdout or "") + (r.stderr or "")
+        if "," in out or "Available versions" in out:
+            break
+    seen, vers = set(), []
+    for v in re.findall(r"\b(\d+\.\d+\.\d+(?:\.?post\d+)?)\b", out):
+        if v not in seen and not v.startswith("0.0"):
+            seen.add(v)
+            vers.append(v)
+
+    def key(v):
+        return [int(p) for p in v.split(".post")[0].split(".")]
+
+    return sorted(vers, key=key, reverse=True)
+
+
+def newest_in(versions, series):
+    """Highest published patch of a minor series, e.g. '0.11' -> '0.11.2'."""
+    xs = [v for v in versions if v.startswith(series + ".")]
+    return xs[0] if xs else None
+
+
+AVAILABLE = available_vllm_versions()
+print(f"vLLM releases on PyPI: {len(AVAILABLE)}"
+      + (f", newest {AVAILABLE[0]}" if AVAILABLE else " (could not list)"))
+
 if VLLM_SPEC:
     CANDIDATES = [VLLM_SPEC]
-elif DRIVER_CUDA[0] >= 13:
-    CANDIDATES = ["-U vllm", "vllm==0.11.2", "vllm==0.10.2"]
 else:
-    # Newest first among the releases that predate the CUDA 13 switch, so a host
-    # that can run a recent vLLM still gets one.
-    CANDIDATES = ["vllm==0.11.2", "vllm==0.10.2", "vllm==0.9.2", "-U vllm"]
+    # Series that predate vLLM's move to CUDA 13, newest first, resolved to
+    # whatever patch actually exists. On a CUDA 13 host the newest wheel is
+    # correct and is tried first instead.
+    older = [f"vllm=={v}" for v in
+             (newest_in(AVAILABLE, s) for s in ("0.11", "0.10", "0.9")) if v]
+    CANDIDATES = (["-U vllm"] + older if DRIVER_CUDA[0] >= 13
+                  else older + ["-U vllm"])
+    if not older:      # listing failed; fall back to fixed pins
+        CANDIDATES = ["-U vllm", "vllm==0.10.2", "vllm==0.9.2"]
+print("will try, in order:", CANDIDATES)
 
 # The gate. `import vllm` in a subprocess is the cheapest possible proof that the
 # wheel matches this machine, and it takes under a minute. Not doing this cost a
