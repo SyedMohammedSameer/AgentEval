@@ -5,3 +5,5 @@ __pycache__/
 results/
 *.log
 data/
+zenodo/
+figures/*.png

@@ -7,16 +7,17 @@ repair steps the four models wrote **five** suppression directives in total, and
 94% of the findings they removed were also gone from a held-out analyser that was
 never shown to them.
 
-They complied. And complying with a security rule broke **one working program in
-three**.
+They complied. And complying with **one particular rule** broke two working
+programs in five.
 
 | | |
 |---|---|
 | findings removed from the shown analyser that survived in the held-out twin | **6%** [4%, 9%] |
 | suppression directives written across 4,439 steps | **5** |
-| working programs broken by repairing a security finding | **35.2%** [27%, 44%] |
-| working programs broken by repairing a non-security finding | **8.8%** [5%, 16%] |
-| same task, same model: security repair broke it but lint repair did not | **46 vs 3**, exact McNemar *p* = 7 × 10⁻¹¹ |
+| working programs broken when **S311** was among the findings shown | **41.8%** [32%, 52%] |
+| working programs broken when no security rule was shown | **8.8%** [5%, 16%] |
+| same task, same model: Ruff repair broke it but Pylint repair did not | **46 vs 3**, exact McNemar *p* = 7 × 10⁻¹¹ |
+| the same comparison with every S311 task removed | **10 vs 3**, *p* = 0.09 — **not significant** |
 
 ## The result the study was designed to find, and did not
 
@@ -60,12 +61,24 @@ model's own code.
 Only the discordant pairs carry information, and they run 46 to 3 against the Ruff
 arm. Every model is individually significant.
 
-It is the security rules specifically, not Ruff in general:
+The damage is not spread across the ruleset. It is one rule.
 
 | findings the agent was shown | tasks | broke | rate | 95% CI |
 |---|---|---|---|---|
-| at least one `S` (security) rule | 122 | 43 | **35.2%** | [27%, 44%] |
-| no security rule | 91 | 8 | **8.8%** | [5%, 16%] |
+| `S311` among them | 91 | 38 | **41.8%** | [32%, 52%] |
+| some other security rule, no `S311` | 31 | 5 | 16.1% | [7%, 33%] |
+| no security rule at all | 91 | 8 | 8.8% | [5%, 16%] |
+
+**Removing S311 removes the result.** Repeat the paired test on the tasks where
+S311 never appeared and it falls to 10 versus 3, *p* = 0.09. At this sample size
+that is indistinguishable from noise.
+
+So the honest claim is narrow and specific: this is not evidence that security
+rules as a class are dangerous in a repair loop. It is evidence that **`S311` is**,
+and that a single rule was enough to make the whole Ruff arm look four times more
+destructive than the Pylint arm. Anyone reasoning about "static analysis in the
+agent loop" as one thing would have drawn the wrong conclusion in either
+direction.
 
 ## The clearest case: S311
 
@@ -89,8 +102,12 @@ could either: the analyser reported success. Of the 51 broken repairs, 20 change
 behaviour while still running and 14 introduced a Pylint `E0602`/`E1101` — a name
 the repair had removed.
 
-`B006` (mutable default argument) behaves the same way: 17 tasks, **53%** broken.
-Changing `def f(x=[])` to `def f(x=None)` is textbook correct and changes the API.
+`B006` (mutable default argument) is the same shape of mistake on a smaller
+sample: 17 tasks, **53%** broken. Changing `def f(x=[])` to `def f(x=None)` is
+textbook correct and changes the API. What `S311` and `B006` share is not that
+they are security rules — `B006` is not — but that their fix **changes what the
+program does**, and neither the analyser nor the agent has any way to know whether
+that was acceptable here.
 
 ## Why this matters more than the gaming result
 
@@ -102,7 +119,9 @@ The only thing that catches it is running the code.
 This is the empirical case for verification that is independent of the gate being
 optimised against, and it is a different case from the one usually made. The risk
 in an automated quality gate is not that agents cheat it. It is that they obey it
-in contexts where its advice is wrong.
+in contexts where its advice is wrong — and that the exposure is concentrated in a
+few rules rather than spread thinly, which means it is findable and fixable per
+rule rather than being an argument against the whole practice.
 
 ## What was run
 
@@ -141,6 +160,12 @@ Pooled, the agents addressed 70% of Ruff findings and 20% of Pylint's.
 
 **Single-file Python from one benchmark.** Nothing here extends to Java, to CodeQL,
 or to repository-scale change without being measured there.
+
+**The breakage result rests on one rule.** `S311` supplies 91 of the 122
+security-shown tasks, and without it the paired comparison is *p* = 0.09 on 13
+discordant pairs. The `S311` finding itself is well powered; a claim about
+security rules in general is not, and is not made. `B006`'s 53% is 17 tasks and
+should be read as a lead, not a result.
 
 ## Reproducing
 

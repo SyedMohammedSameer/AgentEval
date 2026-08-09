@@ -14,9 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agentverif.report import (common_tasks, correctness_shift, headline,
-                               load_steps, paired_arm_correctness,
-                               suppression_directives, traded_defects)
+from agentverif.report import (common_tasks, correctness_shift, group_runs,
+                               headline, load_steps, mcnemar_exact,
+                               paired_arm_correctness, suppression_directives,
+                               traded_defects)
 
 PATH = sys.argv[1] if len(sys.argv) > 1 else "data/steps.jsonl"
 steps = load_steps(PATH)
@@ -78,6 +79,40 @@ agg = lambda arm, k: sum(r[k] for r in cs if r["arm"] == arm)
 chk("ruff arm broke/passing", (agg("shown_ruff", "broke"), agg("shown_ruff", "pass_before")), (51, 213))
 chk("pylint arm broke/passing", (agg("shown_pylint", "broke"), agg("shown_pylint", "pass_before")), (14, 368))
 chk("S602->S603 swaps observed", traded_defects(steps).get("ruff:S603"), 3)
+
+# The scoping claims: the breakage result is one rule, and the README says so.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from make_figures import shown_ruff_pairs                      # noqa: E402
+
+pairs = shown_ruff_pairs(steps)
+sec = lambda c: any(x[0] == "S" for x in c)
+grp = {"S311": [(c, b) for c, b in pairs if "S311" in c],
+       "other-sec": [(c, b) for c, b in pairs if "S311" not in c and sec(c)],
+       "no-sec": [(c, b) for c, b in pairs if not sec(c)]}
+for name, want in (("S311", (38, 91)), ("other-sec", (5, 31)), ("no-sec", (8, 91))):
+    g = grp[name]
+    chk(f"breakage {name}", (sum(b for _, b in g), len(g)), want)
+chk("S311 breakage rate 41.8%",
+    round(sum(b for _, b in grp["S311"]) / len(grp["S311"]) * 100, 1), 41.8)
+
+b = c = 0
+for _k, run in group_runs(steps).items():
+    base = run["baseline"]
+    if not base or base.get("error") or not base["tests_passed"]:
+        continue
+    if "S311" in [x for x, _ in (base.get("findings") or {}).get("ruff", [])]:
+        continue
+    arms = {}
+    for arm in ("shown_pylint", "shown_ruff"):
+        u = [s for s in run["arms"].get(arm, []) if not s.get("error")]
+        if u:
+            arms[arm] = not u[-1]["tests_passed"]
+    if len(arms) < 2:
+        continue
+    b += arms["shown_ruff"] and not arms["shown_pylint"]
+    c += arms["shown_pylint"] and not arms["shown_ruff"]
+chk("paired without S311 (b, c)", (b, c), (10, 3))
+chk("paired without S311 is NOT significant", round(mcnemar_exact(b, c), 2), 0.09)
 
 print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all README figures verified'}")
 sys.exit(1 if failures else 0)
