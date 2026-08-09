@@ -92,5 +92,23 @@ summary = {
 with open(os.path.join(OUT_DIR, "summary.json"), "w") as fh:
     json.dump(summary, fh, indent=2, default=str)
 print(f"\nwrote {OUT_DIR}/summary.json and {STEPS_PATH}")
-print("Download the whole results/ folder from the notebook output before the "
-      "session expires.")
+
+# Archive and offer the download without being asked. On Colab /content is wiped
+# when the runtime recycles, and a completed run has already been lost that way:
+# an hour of GPU time and the raw record a reviewer would want to see. Telling the
+# reader to remember is not a safeguard.
+import shutil
+
+archive = shutil.make_archive(os.path.join(WORK_ROOT, "agenteval-results"),
+                              "zip", OUT_DIR)
+print(f"archive: {archive} ({os.path.getsize(archive) / 1e6:.1f} MB)")
+if DRIVE in OUT_DIR:
+    print("Results are on Drive and survive a disconnect.")
+else:
+    print("Results are on ephemeral storage. Keep the archive: it is the raw "
+          "record, and re-deriving it costs another GPU hour.")
+    try:
+        from google.colab import files
+        files.download(archive)
+    except Exception as exc:
+        print(f"  (download it from the file browser: {exc})")
