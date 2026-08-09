@@ -15,6 +15,8 @@ import tempfile
 
 from agentverif.report import (
     collect_fates,
+    mcnemar_exact,
+    paired_arm_correctness,
     common_tasks,
     correctness_shift,
     format_headline,
@@ -220,3 +222,75 @@ def test_a_model_with_no_usable_data_at_all_does_not_empty_the_intersection():
     steps = run(task="T/1", model="a") + [
         step("T/1", "b", "baseline", 0, error="Timeout")]
     assert common_tasks(steps) == {"T/1"}
+
+
+# ------------------------------------------------- paired arm comparison
+
+
+def both_arms(task, model, *, base_passed=True, ruff_breaks=False,
+              pylint_breaks=False):
+    return [
+        step(task, model, "baseline", 0, findings=VULN, passed=base_passed),
+        step(task, model, "shown_pylint", 1, shown="pylint", findings=FIXED,
+             passed=not pylint_breaks),
+        step(task, model, "shown_ruff", 1, shown="ruff", findings=FIXED,
+             passed=not ruff_breaks),
+    ]
+
+
+def test_only_tasks_where_both_arms_ran_are_paired():
+    """The arms cover different task sets, so an unpaired comparison compares
+    different work. A task only one arm reached cannot contribute."""
+    steps = (both_arms("T/1", "m")
+             + [step("T/2", "m", "baseline", 0, findings=VULN),
+                step("T/2", "m", "shown_pylint", 1, shown="pylint", findings=FIXED)])
+    assert paired_arm_correctness(steps)[0]["n_pairs"] == 1
+
+
+def test_a_baseline_that_never_passed_cannot_be_broken():
+    steps = both_arms("T/1", "m", base_passed=False, ruff_breaks=True)
+    assert paired_arm_correctness(steps) == []
+
+
+def test_discordant_pairs_are_attributed_to_the_right_arm():
+    steps = (both_arms("T/1", "m", ruff_breaks=True)
+             + both_arms("T/2", "m", pylint_breaks=True)
+             + both_arms("T/3", "m", ruff_breaks=True, pylint_breaks=True)
+             + both_arms("T/4", "m"))
+    row = paired_arm_correctness(steps)[0]
+    assert (row["ruff_only"], row["pylint_only"]) == (1, 1)
+    assert (row["both"], row["neither"]) == (1, 1)
+
+
+def test_a_lopsided_split_is_significant_and_a_balanced_one_is_not():
+    lopsided = [s for i in range(12)
+                for s in both_arms(f"T/{i}", "m", ruff_breaks=True)]
+    assert paired_arm_correctness(lopsided)[0]["p_exact"] < 0.01
+
+    balanced = ([s for i in range(6) for s in both_arms(f"T/{i}", "m", ruff_breaks=True)]
+                + [s for i in range(6, 12)
+                   for s in both_arms(f"T/{i}", "m", pylint_breaks=True)])
+    assert paired_arm_correctness(balanced)[0]["p_exact"] == 1.0
+
+
+def test_concordant_pairs_do_not_drive_the_test():
+    """Pairs where both arms broke it, or neither did, carry no information
+    about which arm is worse and must not shrink the p-value."""
+    a = [s for i in range(8) for s in both_arms(f"T/{i}", "m", ruff_breaks=True)]
+    b = a + [s for i in range(8, 60)
+             for s in both_arms(f"T/{i}", "m", ruff_breaks=True, pylint_breaks=True)]
+    assert paired_arm_correctness(a)[0]["p_exact"] == \
+           paired_arm_correctness(b)[0]["p_exact"]
+
+
+def test_pooled_row_totals_the_models():
+    steps = (both_arms("T/1", "a", ruff_breaks=True)
+             + both_arms("T/1", "b", ruff_breaks=True))
+    rows = paired_arm_correctness(steps)
+    assert rows[-1]["model"] == "ALL" and rows[-1]["ruff_only"] == 2
+
+
+def test_mcnemar_is_symmetric_and_bounded():
+    assert mcnemar_exact(0, 0) == 1.0
+    assert mcnemar_exact(9, 1) == mcnemar_exact(1, 9)
+    assert 0.0 < mcnemar_exact(20, 3) <= 1.0

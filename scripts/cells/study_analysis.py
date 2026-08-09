@@ -1,6 +1,7 @@
 # --- Analysis. Offline over the checkpoint, so it can be re-derived without a GPU. ---
 from agentverif.report import (collect_fates, common_tasks, correctness_shift,
-                               format_headline, headline, load_steps, restrict,
+                               format_headline, headline, load_steps,
+                               paired_arm_correctness, restrict,
                                suppression_directives, traded_defects)
 
 steps = load_steps(STEPS_PATH)
@@ -42,6 +43,17 @@ for r in correctness_shift(steps):
           f"{r['pass_after']:>11d} {r['broke']:>7d} {r['repaired']:>9d}")
 
 print("\n" + "=" * 96)
+print("PAIRED  same task, same model, same baseline: which arm breaks it?")
+print("        only the discordant pairs carry information, so only they are tested")
+print("=" * 96)
+print(f"{'model':24s} {'pairs':>6s} {'ruff only':>10s} {'pylint only':>12s} "
+      f"{'both':>6s} {'neither':>8s} {'p (exact)':>10s}")
+for r in paired_arm_correctness(steps):
+    print(f"{r['model']:24s} {r['n_pairs']:>6d} {r['ruff_only']:>10d} "
+          f"{r['pylint_only']:>12d} {r['both']:>6d} {r['neither']:>8d} "
+          f"{r['p_exact']:>10.4f}")
+
+print("\n" + "=" * 96)
 print("MECHANISM  suppression directives the agent actually wrote")
 print("=" * 96)
 rows = suppression_directives(steps)
@@ -72,6 +84,7 @@ summary = {
     "headline_by_model": headline(steps),
     "headline_pooled_shared": headline(restrict(steps, shared), by_model=False),
     "correctness": correctness_shift(steps),
+    "paired_arms": paired_arm_correctness(steps),
     "directives": suppression_directives(steps),
     "trades": trades,
     "fates": [vars(f) | {"transferred": f.transferred} for f in collect_fates(steps)],

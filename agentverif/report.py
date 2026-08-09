@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 from collections import defaultdict
-from math import sqrt
+from math import comb, sqrt
 
 from .transfer import fates_for_arm, introduced_codes, summarise
 
@@ -152,6 +152,64 @@ def correctness_shift(steps: list[dict]) -> list[dict]:
     for (model, arm), b in sorted(buckets.items()):
         rows.append({"model": model, "arm": arm, **b,
                      "broke_rate": b["broke"] / b["n"] if b["n"] else 0.0})
+    return rows
+
+
+def mcnemar_exact(b: int, c: int) -> float:
+    """Two-sided exact McNemar on the discordant pairs.
+
+    Exact rather than the chi-square approximation because the discordant counts
+    here are small enough that the approximation is not trustworthy, and binomial
+    tails at this size cost nothing to compute.
+    """
+    n = b + c
+    if n == 0:
+        return 1.0
+    k = min(b, c)
+    tail = sum(comb(n, i) for i in range(k + 1)) * (0.5 ** n)
+    return min(1.0, 2 * tail)
+
+
+def paired_arm_correctness(steps: list[dict]) -> list[dict]:
+    """Does repairing security findings break more code than repairing lint?
+
+    The two arms cover different task sets - ruff only fires on about half of
+    them - so comparing their raw breakage rates compares different work. This
+    restricts to (task, model) pairs where *both* arms ran and the baseline
+    passed its tests, which makes every comparison within one task on one model's
+    own solution. `b` and `c` are the discordant pairs, and they are the whole
+    test: pairs where both arms broke it, or neither did, say nothing about which
+    arm is worse.
+    """
+    per_model: dict = defaultdict(lambda: {"both": 0, "ruff_only": 0,
+                                           "pylint_only": 0, "neither": 0})
+    for (task, model), run in group_runs(steps).items():
+        base = run["baseline"]
+        if not base or base.get("error") or not base["tests_passed"]:
+            continue
+        broke = {}
+        for arm in ("shown_pylint", "shown_ruff"):
+            usable = [s for s in run["arms"].get(arm, []) if not s.get("error")]
+            if usable:
+                broke[arm] = not usable[-1]["tests_passed"]
+        if len(broke) < 2:
+            continue        # only one arm ran; not a pair
+        cell = ("both" if broke["shown_ruff"] and broke["shown_pylint"] else
+                "ruff_only" if broke["shown_ruff"] else
+                "pylint_only" if broke["shown_pylint"] else "neither")
+        per_model[model][cell] += 1
+
+    rows = []
+    pooled = {"both": 0, "ruff_only": 0, "pylint_only": 0, "neither": 0}
+    for model, t in sorted(per_model.items()):
+        for k in pooled:
+            pooled[k] += t[k]
+        rows.append({"model": model, **t, "n_pairs": sum(t.values()),
+                     "p_exact": mcnemar_exact(t["ruff_only"], t["pylint_only"])})
+    if rows:
+        rows.append({"model": "ALL", **pooled, "n_pairs": sum(pooled.values()),
+                     "p_exact": mcnemar_exact(pooled["ruff_only"],
+                                              pooled["pylint_only"])})
     return rows
 
 
