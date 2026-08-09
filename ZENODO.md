@@ -15,8 +15,9 @@ Upload all six. Drag the whole `zenodo/` contents in at once.
 | `summary.json` | every table in the paper, plus the per-finding fates behind them | 2.4 MB |
 | `run_manifest.json` | models, seed, budgets, analyser and vLLM versions, the git commit, the 300 task ids | 9 KB |
 | `agenteval-code.zip` | the code snapshot at the commit that produced the run | 122 KB |
-| `figures/*.png` | the four figures | 270 KB |
-| `PAPER.md` | the write-up | 10 KB |
+| `figures/*.png` | the four figures | 300 KB |
+| `paper.pdf` | the paper | 400 KB |
+| `paper.tex` | its LaTeX source, so the record is editable, not just readable | 18 KB |
 
 > Zenodo will not let you add, remove or change files after publishing. Check the
 > list before you hit Publish. If you want to change something later you have to

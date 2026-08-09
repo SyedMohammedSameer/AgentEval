@@ -21,7 +21,9 @@ from agentverif.report import (correctness_shift, group_runs,  # noqa: E402
                                headline, load_steps,
                                paired_arm_correctness, wilson)
 
-SURFACE, INK, MUTED = "#fcfcfb", "#0b0b0b", "#52514e"
+# White rather than the off-white chart surface: these are placed on a printed
+# page, and #fcfcfb reads as a visible grey panel against it.
+SURFACE, INK, MUTED = "#ffffff", "#0b0b0b", "#52514e"
 BLUE, ORANGE, GRID = "#2a78d6", "#eb6834", "#e3e2df"
 SHORT = {"deepseek-coder-6.7b": "DeepSeek 6.7B", "granite-8b-code": "Granite 8B",
          "qwen2.5-coder-7b": "Qwen2.5 7B", "yi-coder-9b": "Yi 9B"}
@@ -98,7 +100,7 @@ def fig_rule_family(steps, out):
     ax.set_title("One rule accounts for the damage",
                  loc="left", fontsize=11, color=INK, pad=12, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=220, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
 
 
@@ -134,7 +136,7 @@ def fig_paired(steps, out):
     ax.set_title("Within the same task, on the same model's own solution",
                  loc="left", fontsize=11, color=INK, pad=12, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=220, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
 
 
@@ -162,7 +164,7 @@ def fig_by_rule(steps, out, min_n=8):
     ax.set_title("Breakage by rule: the fixes that change what the code does",
                  loc="left", fontsize=11, color=INK, pad=12, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=220, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
 
 
@@ -193,7 +195,7 @@ def fig_suppression(steps, out):
     ax.set_title("The agents did not game the analyser they were shown",
                  loc="left", fontsize=11, color=INK, pad=12, fontweight="bold")
     fig.tight_layout()
-    fig.savefig(out, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=220, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
 
 

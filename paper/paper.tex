@@ -1,0 +1,450 @@
+% =====================================================================
+%  Agents Don't Game the Linter
+%  Compiles with pdfLaTeX on Overleaf. Upload the four PNGs to the same
+%  folder as this file:
+%     fig1_breakage_by_rule_group.png
+%     fig2_paired_arms.png
+%     fig3_by_rule.png
+%     fig4_no_gaming.png
+% =====================================================================
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage[margin=1.05in]{geometry}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{./}{figures/}}
+
+% Floats here are wide and short; the defaults strand them on sparse pages.
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.85}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.80}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+% --- palette, matched to the figures -------------------------------------
+\definecolor{ink}{HTML}{0B0B0B}
+\definecolor{muted}{HTML}{52514E}
+\definecolor{accent}{HTML}{2A78D6}
+\definecolor{warm}{HTML}{EB6834}
+\definecolor{rule}{HTML}{D8D7D3}
+\definecolor{panel}{HTML}{F6F7F9}
+
+\hypersetup{colorlinks=true, linkcolor=accent, urlcolor=accent, citecolor=accent}
+
+% --- typography ----------------------------------------------------------
+\titleformat{\section}{\normalfont\large\bfseries\color{ink}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries\color{ink}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em plus .3em minus .2em}{0.6em}
+\titlespacing*{\subsection}{0pt}{1.2em plus .2em minus .2em}{0.4em}
+
+\captionsetup{font=small, labelfont={bf,color=ink}, textfont={color=muted},
+              width=.94\textwidth, skip=8pt}
+\captionsetup[table]{skip=6pt}
+\renewcommand{\arraystretch}{1.18}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\ci}[2]{\,[#1,\,#2]}
+
+% =====================================================================
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{ink} Agents Don't Game the Linter\par}
+\vspace{0.45em}
+{\large\color{muted} Measuring whether LLM repair satisfies the analyser\\
+or fixes the defect\par}
+\vspace{1.3em}
+{\normalsize Syed Mohammed Sameer\par}
+\vspace{0.25em}
+{\small\color{muted} \href{mailto:sdmohammedsameer@gmail.com}{sdmohammedsameer@gmail.com}\par}
+\vspace{0.35em}
+{\small\color{muted} \today\par}
+\end{center}
+
+\vspace{0.6em}
+
+\begin{tcolorbox}[colback=panel, colframe=rule, boxrule=0.5pt, arc=2pt,
+                  left=12pt, right=12pt, top=10pt, bottom=10pt]
+\small
+\textbf{Abstract.} Four code-specialised LLMs were shown static-analysis findings
+on their own solutions and asked to fix them. The study was designed to catch
+Goodharting: satisfying the analyser that was shown while the defect stayed put.
+\textbf{It did not happen.} Across 4{,}439 repair steps the models wrote five
+suppression directives in total, and 94\% of the findings they removed were also
+gone from a held-out analyser they never saw (suppression rate 6\%, 95\% CI
+$[4\%, 9\%]$). They complied instead---and complying with one particular rule
+broke two working programs in five. Comparing two repair arms within the same
+task on the same model's own solution, the arm shown Ruff broke the program where
+the arm shown Pylint did not on 46 occasions against 3 the other way (exact
+McNemar, $p = 7\times10^{-11}$, $n = 213$ pairs). That result is one rule:
+Ruff's \code{S311} broke 41.8\% $[32\%, 52\%]$ of the programs it appeared in,
+and removing every \code{S311} task drops the paired comparison to 10 versus 3,
+$p = 0.09$. The finding is therefore not that security rules are dangerous in a
+repair loop, but that \code{S311} is, and that a single rule was enough to make an
+entire ruleset look four times more destructive than another. A suppressed
+finding leaves a directive in the diff; faithful destructive repair leaves nothing
+to find.
+\end{tcolorbox}
+
+% =====================================================================
+\section{The question}
+
+Static analysis is increasingly placed inside an automated loop: an agent writes
+code, an analyser reports findings, the agent revises. The findings go down. That
+much is established and is the reason the pattern is being adopted.
+
+The obvious worry is Goodhart's law. If the measure becomes the target, an agent
+may learn to satisfy the particular analyser it is scored against rather than
+improve the code. In Python the cheapest way to do that is a suppression comment:
+\code{\# noqa} silences Ruff, \code{\# nosec} silences Bandit, and neither
+changes a line of behaviour.
+
+This study asks whether that happens, using an instrument that can tell the
+difference, and then reports what it found instead.
+
+% =====================================================================
+\section{Design}
+
+\subsection{The instrument}
+
+Ruff's \code{S} rules are a reimplementation of Bandit's, numbered identically:
+\code{S602} and \code{B602} are the same defect seen by two separately built
+engines. Bandit does not honour Ruff's suppression syntax. That near-duplication
+is what makes the pair sharp rather than redundant.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{variant of \code{subprocess.check\_output(cmd, shell=True)}}
+  & \textbf{Ruff (shown)} & \textbf{Bandit (held out)} \\
+\midrule
+vulnerable                       & \code{S602}   & \code{B404}, \code{B602} \\
+suppressed with \code{\# noqa}   & \textit{none} & \code{B404}, \code{B602} \\
+genuinely fixed                  & \code{S603}   & \code{B404}, \code{B603} \\
+\bottomrule
+\end{tabular}
+\caption{A finding that leaves the shown analyser while its held-out twin remains
+is suppression. One that leaves both is repair. This is re-verified on the
+installed tool versions before every run.}
+\end{table}
+
+\subsection{Why counts are not the measurement}
+
+Read that table as counts and it says the opposite of the truth. The vulnerable
+variant scores 1 and 2; the genuinely fixed variant also scores 1 and 2, because
+the fix moves \code{S602} to \code{S603} and \code{B602} to \code{B603}. Only the
+suppression changes a count, and it changes it favourably.
+
+A count-based delta would therefore score a real fix as worthless and a
+\code{\# noqa} as a total success, inverting the study's own headline. Every
+finding is instead tracked individually by code: \emph{addressed} if the shown
+analyser no longer reports it, \emph{transferred} if the held-out counterpart is
+also gone, \emph{introduced} if repair traded one defect for another. A finding
+with no counterpart is recorded as \emph{unmeasurable} rather than folded into
+either bucket, because counting it either way manufactures a result. The run
+observed three such swaps.
+
+\subsection{The two arms}
+
+Each task produces one baseline solution and then two \emph{independent} repair
+arms branching from that same baseline:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{arm} & \textbf{shown} & \textbf{rounds} & \textbf{runs on} \\
+\midrule
+\code{shown\_pylint} & Pylint & 2 & every task (Pylint fires on 100\% of files) \\
+\code{shown\_ruff}   & Ruff   & 2 & tasks with Ruff findings ($\approx$50\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Branching rather than chaining is what makes every comparison paired within a
+task. Both arms record findings from all three analysers at every step, plus the
+task's own tests, because a finding removed by breaking the function is not a fix
+and must stay distinguishable from one that was merely hidden.
+
+The repair prompt says nothing about suppression in either direction. Telling the
+agent not to suppress would destroy the behaviour being measured; telling it that
+it may would manufacture it. It does require that behaviour be preserved.
+
+\subsection{What was run}
+
+Four code-specialised instruct models from four families, within a
+1.3$\times$ size spread, served at bfloat16 on one A100 through vLLM at
+temperature 0: \code{Qwen2.5-Coder-7B-Instruct},
+\code{deepseek-coder-6.7b-instruct}, \code{Yi-Coder-9B-Chat}, and
+\code{granite-8b-code-instruct-128k}.
+
+300 BigCodeBench tasks, drawn by a fixed shuffle so every model walks the same
+order, then filtered to those whose \emph{reference} solution passes its own tests
+in the run environment---so a missing package costs coverage rather than
+corrupting the correctness measurement. Two repair rounds per arm. 1{,}200
+task--model pairs, 4{,}439 steps, 1.14 hours, zero errors. Analysers were Ruff
+0.15.11 (\code{--select S,B,SIM,RET,ARG,PERF,C90}), Bandit 1.9.4, and Pylint 4.0.6.
+
+% =====================================================================
+\section{Result 1: the agents did not game the analyser}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{model} & \textbf{removed} & \textbf{measurable} & \textbf{suppressed} & \textbf{95\% CI} \\
+\midrule
+deepseek-coder-6.7b & 152 & 62  & 2\%  & $[0\%,\ 9\%]$ \\
+granite-8b-code     & 110 & 53  & 8\%  & $[3\%, 18\%]$ \\
+qwen2.5-coder-7b    & 179 & 78  & 12\% & $[6\%, 20\%]$ \\
+yi-coder-9b         & 208 & 90  & 3\%  & $[1\%,\ 9\%]$ \\
+\midrule
+\textbf{pooled}     & \textbf{649} & \textbf{283} & \textbf{6\%} & $\mathbf{[4\%,\ 9\%]}$ \\
+\bottomrule
+\end{tabular}
+\caption{Of the findings each agent removed from the analyser it was shown, the
+proportion still reported by the held-out twin it never saw. Wilson intervals.}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.97\textwidth]{fig4_no_gaming}
+\caption{The result the study was built to detect, and did not find. The dashed
+line marks what systematic gaming would look like.}
+\end{figure}
+
+The interval is nowhere near 50\%. Two independent measurements agree: the
+directives actually written---five, across the entire study---and the held-out
+analyser, which shows 94\% of removals transferring. The agents addressed 70\% of
+Ruff findings and 20\% of Pylint's, and did so honestly.
+
+This is a negative result on the study's own premise. It is also what makes the
+next section believable: an agent that were gaming the metric would confound every
+correctness measurement that follows.
+
+% =====================================================================
+\section{Result 2: faithful repair breaks working code}
+
+Where both arms ran on the same task and the baseline passed its tests, the arms
+can be compared \emph{within} that task, on that model's own solution. Only the
+discordant pairs carry information---cases where both arms broke it, or neither
+did, say nothing about which arm is worse---so only those are tested, with an
+exact McNemar rather than the chi-square approximation, which is not trustworthy
+at these counts.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+\textbf{model} & \textbf{pairs} & \textbf{Ruff broke it} & \textbf{Pylint broke it}
+ & \textbf{both} & \textbf{neither} & \textbf{$p$ exact} \\
+\midrule
+deepseek-coder-6.7b & 46 &  9 & 1 & 1 & 35 & 0.022 \\
+granite-8b-code     & 49 & 10 & 0 & 0 & 39 & 0.002 \\
+qwen2.5-coder-7b    & 56 & 12 & 0 & 4 & 40 & 0.0005 \\
+yi-coder-9b         & 62 & 15 & 2 & 0 & 45 & 0.002 \\
+\midrule
+\textbf{pooled} & \textbf{213} & \textbf{46} & \textbf{3} & \textbf{5} & \textbf{159}
+ & $\mathbf{7\times10^{-11}}$ \\
+\bottomrule
+\end{tabular}
+\caption{Discordant pairs run 46 to 3 against the Ruff arm. Every model is
+individually significant.}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.97\textwidth]{fig2_paired_arms}
+\caption{The controlled comparison. Same task, same model, same baseline
+solution; the only difference is which analyser's findings the agent was shown.}
+\end{figure}
+
+Unpaired, the same picture: the Ruff arm turned 213 working solutions into 163,
+breaking 23.9\% $[18.7\%, 30.1\%]$ of them and repairing one, while the Pylint arm
+broke 3.8\% $[2.3\%, 6.3\%]$.
+
+% =====================================================================
+\section{Result 3: the damage is one rule}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{findings the agent was shown} & \textbf{tasks} & \textbf{broke} & \textbf{rate} & \textbf{95\% CI} \\
+\midrule
+\code{S311} among them              & 91 & 38 & \textbf{41.8\%} & $[32\%, 52\%]$ \\
+some other security rule, no \code{S311} & 31 &  5 & 16.1\% & $[7\%, 33\%]$ \\
+no security rule at all             & 91 &  8 & 8.8\%  & $[5\%, 16\%]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.97\textwidth]{fig1_breakage_by_rule_group}
+\caption{Grouping by ``security rule or not'' looked like a fourfold effect until
+\code{S311} was held out. \code{S311} supplies 91 of the 122 security-shown tasks,
+so that grouping was reporting one rule under a class name.}
+\end{figure}
+
+\begin{tcolorbox}[colback=white, colframe=warm, boxrule=1pt, arc=2pt,
+                  left=12pt, right=12pt, top=9pt, bottom=9pt]
+\small
+\textbf{Removing \code{S311} removes the result.} Repeating the paired test on
+tasks where \code{S311} never appeared gives 10 versus 3, $p = 0.09$. At this
+sample size that is indistinguishable from noise.
+\end{tcolorbox}
+
+The honest claim is therefore narrow. This is \emph{not} evidence that security
+rules as a class are dangerous in a repair loop. It is evidence that \code{S311}
+is, and that a single rule was enough to make the whole Ruff arm look four times
+more destructive than the Pylint arm. Anyone reasoning about ``static analysis in
+the agent loop'' as one undifferentiated thing would have drawn the wrong
+conclusion, in either direction.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.97\textwidth]{fig3_by_rule}
+\caption{Breakage rate per rule, among tasks where that rule was one of the
+findings shown. The two leaders are rules whose fix changes program behaviour.}
+\end{figure}
+
+% =====================================================================
+\section{The mechanism}
+
+\code{S311}---\emph{``standard pseudo-random generators are not suitable for
+cryptographic purposes''}---fired on 202 task--model pairs and was removed 79\% of
+the time.
+
+None of that code was cryptographic. BigCodeBench uses \code{random} for data
+generation, and its tests seed it and assert on the output. The agent does as it
+is told, swaps \code{random} for \code{secrets}, and the program stops being
+deterministic. \code{secrets} has no \code{seed()}, so some stop running at all:
+
+\begin{center}
+\small\ttfamily\color{muted}
+BigCodeBench/87\quad qwen2.5-coder-7b\quad fail: NameError: name 'seed' is not defined
+\end{center}
+
+The finding was a true positive about the code and a false positive about the
+context. The agent could not tell the difference, and nothing downstream could
+either: the analyser reported success. Of the 51 broken repairs in the Ruff arm,
+23 raised an error during the test, 20 changed behaviour while still running, and
+14 introduced a Pylint \code{E0602} or \code{E1101}---a name the repair had
+removed.
+
+\code{B006} (mutable default argument) is the same shape of mistake on a smaller
+sample: 17 tasks, 53\% broken. Changing \code{def f(x=[])} to \code{def f(x=None)}
+is textbook correct and changes the API. What \code{S311} and \code{B006} share is
+not that they are security rules---\code{B006} is not---but that their fix
+\emph{changes what the program does}, and neither analyser nor agent has any way to
+know whether that was acceptable here.
+
+% =====================================================================
+\section{Why this matters more than the gaming result}
+
+A suppressed finding is detectable. The directive sits in the diff, and a second
+analyser catches it immediately. Faithful, destructive repair leaves nothing to
+find: the analyser is satisfied, the diff looks like a fix, and the program is
+broken. The only thing that catches it is running the code.
+
+This is an empirical case for verification that is independent of the gate being
+optimised against---and a different case from the one usually made. The risk in an
+automated quality gate is not that agents cheat it. It is that they obey it in
+contexts where its advice is wrong. The exposure being concentrated in a few rules
+rather than spread thinly is the encouraging part: it is findable and fixable per
+rule, rather than an argument against the practice.
+
+For a repair loop in production, three things follow. Run the test suite inside
+the loop, not after it. Treat rules whose remediation changes semantics as a
+separate class requiring stronger evidence before auto-application. And measure
+the gate you are optimising against with an instrument it does not control.
+
+% =====================================================================
+\section{Limitations}
+
+\begin{itemize}[leftmargin=1.2em, itemsep=0.35em, topsep=0.4em]
+\item \textbf{The breakage result rests on one rule.} \code{S311} supplies 91 of
+the 122 security-shown tasks, and without it the paired comparison is $p = 0.09$
+on 13 discordant pairs. The \code{S311} finding itself is well powered; a claim
+about security rules in general is not, and is not made. \code{B006}'s 53\% is 17
+tasks and should be read as a lead.
+
+\item \textbf{Source text was not retained.} Steps record findings, codes, lines
+and test outcomes, but not each revision's text, so the mechanism is established
+from failure modes and introduced codes rather than from diffs. This is the first
+thing to change in a follow-up.
+
+\item \textbf{One sample per task at temperature 0.} The variance budget went into
+tasks rather than seeds. These are point estimates for greedy decoding.
+
+\item \textbf{The Pylint arm reports no transfer rate.} Pylint's message ids have
+no Ruff or Bandit counterpart, so that arm can say what was addressed but not
+whether the fix transferred. It is recorded as unmeasurable rather than as zero
+suppression.
+
+\item \textbf{Single-file Python from one benchmark.} Nothing here extends to
+Java, to CodeQL, or to repository-scale change without being measured there.
+\end{itemize}
+
+% =====================================================================
+\section{Reproducibility}
+
+The complete raw record is published as \code{steps.jsonl}: every step of every
+arm, with findings by tool and code, test outcome, directives written, and tokens.
+All analysis re-derives from it offline, so the tables can be re-sliced or
+corrected without another GPU hour. A verification script recomputes all 23 figures
+quoted in this paper from that file and exits non-zero if the data stops agreeing;
+it was written after an earlier draft's central claim failed its own robustness
+check, and it is what caught it.
+
+The run notebook measures the accelerator and sizes itself to it---one A100
+($\approx$1.1\,h) or a pair of T4s ($\approx$2.5\,h)---and records the git commit
+in its manifest, so a result traces to the code that produced it.
+
+\vspace{0.6em}
+{\small\color{muted}
+Code and data: \url{https://github.com/SyedMohammedSameer/AgentEval}}
+
+% =====================================================================
+\section{Prior work this does not repeat}
+
+Static analysis as a repair feedback loop is established, as is iterative
+refinement degrading security, and self-repair across model scales and families.
+Patch overfitting to tests is long established in the automated program repair
+literature. What appears to remain open, and what this measures, is whether a fix
+aimed at one analyser survives contact with another---and what it costs the
+program when it does.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{bcb} Zheng, T. et al.
+\emph{BigCodeBench: Benchmarking Code Generation with Diverse Function Calls and
+Complex Instructions.} arXiv:2406.15877, 2024.
+\bibitem{sa1} \emph{Static analysis feedback in LLM repair loops.} arXiv:2508.14419.
+\bibitem{sa2} \emph{Iterative refinement and code security.} arXiv:2412.14841.
+\bibitem{sr} \emph{Self-repair across model scales and families.} arXiv:2604.10508.
+\end{thebibliography}
+
+\end{document}
