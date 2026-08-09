@@ -34,8 +34,20 @@ def make_chat(model):
     return chat
 
 
+def failure_signature(text):
+    """The last exception line, which is what distinguishes a model problem from
+    an environment problem. Four models failing on the same missing shared library
+    is one fact repeated four times, not four findings."""
+    lines = [ln.strip() for ln in str(text).splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        if "Error" in ln or "error" in ln:
+            return ln[:200]
+    return lines[-1][:200] if lines else ""
+
+
 sweep_started = time.time()
 runs = []
+seen_failures = set()
 
 for i, model in enumerate(MODELS):
     elapsed = time.time() - sweep_started
@@ -61,14 +73,25 @@ for i, model in enumerate(MODELS):
         try:
             proc, log_path = start_server(model)
         except Exception as exc:
-            # Keep going. Qwen once failed to load on a machine where DeepSeek
-            # loaded fine four minutes later, so a failed launch says something
-            # about that model on this vLLM, not about the environment. Stopping
-            # the sweep here would have thrown away three working models to
-            # protect against a wasted ten minutes.
-            print(f"  SERVER FAILED TO START, moving on:\n{exc}")
+            # A model-specific failure is worth moving past: Qwen once failed to
+            # load on a machine where DeepSeek loaded fine minutes later. The same
+            # failure twice is not model-specific, it is the environment, and
+            # repeating it down the whole list buries the one error worth reading.
+            sig = failure_signature(exc)
+            repeat = sig and sig in seen_failures
+            seen_failures.add(sig)
+            print(f"  SERVER FAILED TO START:\n{exc}" if not repeat
+                  else f"  SERVER FAILED TO START, same error as before: {sig}")
             runs.append({**model, "status": "failed: no_server", "tasks": 0,
                          "error": str(exc)[-1500:]})
+            if repeat and not any(r["status"] == "ok" for r in runs):
+                raise SystemExit(
+                    f"\nTwo models failed identically and none has served:\n\n"
+                    f"  {sig}\n\n"
+                    "That is the environment, not the models, so the remaining "
+                    "ones are not attempted. Fix it and re-run this cell - it "
+                    f"resumes from {STEPS_PATH} rather than starting over."
+                )
             continue
 
         load_min = (time.time() - load_started) / 60
@@ -76,6 +99,9 @@ for i, model in enumerate(MODELS):
                             workers=WORKERS, time_budget_s=budget)
         runs.append({**model, "load_min": round(load_min, 1), **counters,
                      "status": "aborted" if counters["abort_reason"] else "ok"})
+    except SystemExit:
+        stop_server(proc)
+        raise
     except Exception as exc:
         print(f"  FAILED: {type(exc).__name__}: {exc}")
         runs.append({**model, "status": f"failed: {type(exc).__name__}", "tasks": 0})
