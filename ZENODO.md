@@ -1,27 +1,21 @@
 # Zenodo submission — field by field
 
-Everything to paste is below, in the order the form asks for it. Files to upload
-are in `zenodo/`.
+Everything to paste is below, in the order the form asks for it. Only `paper.pdf`
+gets uploaded.
 
 ---
 
 ## Files
 
-Upload all six. Drag the whole `zenodo/` contents in at once.
+Upload **one file**: `paper.pdf`.
 
-| file | what it is | size |
-|---|---|---|
-| `steps.jsonl` | the raw record: every step of every arm, findings by tool and code, test outcome, directives, tokens | 2.1 MB |
-| `summary.json` | every table in the paper, plus the per-finding fates behind them | 2.4 MB |
-| `run_manifest.json` | models, seed, budgets, analyser and vLLM versions, the git commit, the 300 task ids | 9 KB |
-| `agenteval-code.zip` | the code snapshot at the commit that produced the run | 122 KB |
-| `figures/*.png` | the four figures | 300 KB |
-| `paper.pdf` | the paper | 400 KB |
-| `paper.tex` | its LaTeX source, so the record is editable, not just readable | 18 KB |
+The data and code are not uploaded here; the paper points to the GitHub
+repository for both, and the raw run (`steps.jsonl`) is now committed there so
+that link resolves.
 
-> Zenodo will not let you add, remove or change files after publishing. Check the
-> list before you hit Publish. If you want to change something later you have to
-> publish a new version, which gets its own DOI under the same concept DOI.
+> Zenodo will not let you add, remove or change files after publishing. If you
+> later decide to attach the data too, that means publishing a new version, which
+> gets its own DOI under the same concept DOI.
 
 ---
 
@@ -48,81 +42,24 @@ than under a name string.
 
 ## Description
 
-Paste this into the Description box. It is plain HTML, which the editor accepts.
+Plain text. Paste it in; the editor keeps the paragraph breaks.
 
-```html
-<p><strong>Four code LLMs were shown static-analysis findings on their own
-solutions and asked to fix them. The study was built to catch them cheating:
-satisfying the analyser they were shown while the defect stayed put. They did not
-cheat.</strong> Across 4,439 repair steps the four models wrote five suppression
-directives in total, and 94&#37; of the findings they removed were also gone from a
-held-out analyser they were never shown (suppression rate 6&#37;, 95&#37; CI
-[4&#37;, 9&#37;]).</p>
+```
+Four code-specialised LLMs were shown static-analysis findings on their own solutions and asked to fix them. The study was designed to catch Goodharting: satisfying the analyser that was shown while the defect stayed put. It did not happen. Across 4,439 repair steps the models wrote five suppression directives in total, and 94% of the findings they removed were also gone from a held-out analyser they never saw (suppression rate 6%, 95% CI [4%, 9%]).
 
-<p>They complied instead &mdash; and complying with one particular rule broke two
-working programs in five.</p>
+They complied instead, and complying was expensive. Each task ran two repair arms branching from the same baseline solution: one shown Pylint findings, one shown Ruff findings. Restricted to tasks where both arms ran and the baseline passed its own tests, the Ruff arm broke the program where the Pylint arm did not on 46 occasions against 3 the other way (exact McNemar, p = 7 × 10⁻¹¹, 213 pairs, every model individually significant).
 
-<p>Each task ran two repair arms branching from the same baseline solution: one
-shown Pylint findings, one shown Ruff findings. Restricted to tasks where both
-arms ran and the baseline passed its own tests, the Ruff arm broke the program
-and the Pylint arm did not on 46 occasions against 3 the other way (exact
-McNemar, <em>p</em> = 7 &times; 10<sup>&minus;11</sup>, 213 pairs, every model
-individually significant).</p>
+That result is one rule. Ruff's S311 ("pseudo-random generators are not suitable for cryptographic purposes") broke 41.8% [32%, 52%] of the working programs it appeared in, against 8.8% [5%, 16%] where no security rule was shown. Remove every S311 task and the paired comparison falls to 10 versus 3, p = 0.09. This is therefore not evidence that security rules as a class are dangerous in a repair loop; it is evidence that S311 is, and that one rule was enough to make an entire ruleset look four times more destructive than another.
 
-<p><strong>That result is one rule.</strong> Ruff's <code>S311</code>
-(&ldquo;pseudo-random generators are not suitable for cryptographic
-purposes&rdquo;) broke 41.8&#37; [32&#37;, 52&#37;] of the working programs it
-appeared in, against 8.8&#37; [5&#37;, 16&#37;] where no security rule was shown.
-Remove every S311 task and the paired comparison falls to 10 versus 3,
-<em>p</em> = 0.09 &mdash; indistinguishable from noise at this sample size. This
-is therefore not evidence that security rules as a class are dangerous in a repair
-loop; it is evidence that S311 is, and that a single rule was enough to make the
-whole Ruff arm look four times more destructive than the Pylint arm.</p>
+None of the affected code was cryptographic. BigCodeBench uses random for data generation and seeds it in the tests, so the agent swaps in secrets, determinism is lost, and since secrets has no seed() some programs stop running at all: a true positive about the code and a false positive about the context, with the analyser reporting success either way. A suppressed finding leaves a directive in the diff; faithful destructive repair leaves nothing to find. That is an empirical case for verification independent of the gate being optimised against, and a different case from the one usually made.
 
-<p>The mechanism is visible in the failures. None of the affected code was
-cryptographic: BigCodeBench uses <code>random</code> for data generation and seeds
-it in the tests. The agent does as it is told, swaps in <code>secrets</code>,
-determinism is lost, and since <code>secrets</code> has no <code>seed()</code>
-some programs stop running at all. The finding was a true positive about the code
-and a false positive about the context, and the analyser reported success either
-way.</p>
+Method: four models from four families (Qwen2.5-Coder-7B-Instruct, deepseek-coder-6.7b-instruct, Yi-Coder-9B-Chat, granite-8b-code-instruct-128k), bfloat16 on one A100 via vLLM at temperature 0; 300 BigCodeBench tasks filtered to those whose reference solution passes its own tests in the run environment; two repair rounds per arm; 4,439 steps.
 
-<p>A suppressed finding is detectable &mdash; the directive is in the diff and a
-second analyser catches it. Faithful, destructive repair leaves nothing to find.
-This is an empirical case for verification independent of the gate being optimised
-against, and a different case from the one usually made: the risk is not that
-agents cheat a quality gate but that they obey it where its advice is wrong, with
-the exposure concentrated in a few rules rather than spread thinly.</p>
-
-<p><strong>Method.</strong> Four code-specialised instruct models from four
-families within a 1.3&times; size spread (Qwen2.5-Coder-7B-Instruct,
-deepseek-coder-6.7b-instruct, Yi-Coder-9B-Chat, granite-8b-code-instruct-128k),
-served at bfloat16 on one A100 via vLLM at temperature 0. 300 BigCodeBench tasks
-drawn by fixed shuffle and filtered to those whose reference solution passes its
-own tests in the run environment. Two repair rounds per arm; all three analysers
-(Ruff, Bandit, Pylint) measured at every step alongside the task's own tests.
-1,200 task-model pairs, 4,439 steps, 1.14 hours, zero errors. Findings are tracked
-individually by code rather than by count, because fixing
-<code>subprocess.check_output(cmd, shell=True)</code> moves Ruff from
-<code>S602</code> to <code>S603</code> and Bandit from <code>B602</code> to
-<code>B603</code> &mdash; both counts unchanged &mdash; so a count-based delta
-would score a real fix as worthless and a <code>&#35; noqa</code> as a triumph.</p>
-
-<p><strong>Limitations.</strong> The breakage result rests on one rule: S311
-supplies 91 of the 122 security-shown tasks and the comparison is not significant
-without it. Source text was not retained, so the S311 mechanism is established
-from failure modes and introduced codes rather than diffs. One sample per task at
-temperature 0. Single-file Python from one benchmark; nothing here extends to Java,
-to CodeQL, or to repository-scale change without being measured there.</p>
-
-<p><strong>Contents.</strong> <code>steps.jsonl</code> is the complete raw record.
-All analysis re-derives from it offline, and
-<code>scripts/verify_readme.py</code> in the code archive recomputes every figure
-quoted in the paper and exits non-zero if the data stops agreeing.</p>
+Code and the complete raw record: https://github.com/SyedMohammedSameer/AgentEval
 ```
 
 **Licenses** → keep **Creative Commons Attribution 4.0 International** (already
-set). The code archive is MIT; CC-BY on the record covers the paper and data.
+set). That covers the paper; the code in the repository is MIT.
 
 ---
 
@@ -210,5 +147,5 @@ Domain specific fields · Contributors.
 
 1. **Preview** — check the description renders as paragraphs, not raw HTML.
 2. **Visibility** — Public (already set).
-3. **Files are frozen after publishing.** Confirm all six are attached.
+3. **Files are frozen after publishing.** Confirm `paper.pdf` is attached.
 4. **Save draft** first. Publishing mints the DOI and cannot be undone.
