@@ -17,15 +17,17 @@ N_TASKS = 200       # ~25 measurable transfers per model, ~100 pooled
 TP = min(2, N_GPUS)
 MAX_MODEL_LEN = 8192
 GPU_MEM_FRACTION = 0.90
-MAX_NUM_SEQS = 64
+MAX_NUM_SEQS = 32
 MAX_GEN_TOKENS = 1024     # a full corrected file, not a diff
 TEMPERATURE = 0.0         # one deterministic sample; the variance budget goes
                           # into tasks, which is where the estimate needs it
 
 # Concurrency. Each worker alternates between waiting on the server and running
-# analysers and tests as subprocesses, so workers well above the core count keep
-# the GPU batch full without the CPU work ever blocking a generation.
-WORKERS = 32
+# analysers and tests as subprocesses, so workers above the core count keep the
+# GPU batch full without the CPU work ever blocking a generation. Kept to 16
+# against 32 server slots: the extra throughput from a wider batch is small on a
+# T4 pair, and the run finishing matters more than it finishing sooner.
+WORKERS = 16
 
 # Time. Both are hard stops, not estimates. Sizing a run by predicted token
 # counts has been wrong before; sizing it by wall clock cannot be. The task order

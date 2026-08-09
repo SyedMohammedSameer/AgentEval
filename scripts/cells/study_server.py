@@ -1,23 +1,27 @@
-# --- vLLM lifecycle: launch, wait until it truly answers, shut down. ---
+# --- vLLM lifecycle: launch, prove it generates, shut down. ---
 import json, signal, socket, time, urllib.error, urllib.request
 
 _json = json
 PORT = 8000
 BASE_URL = f"http://127.0.0.1:{PORT}/v1"
 
-# Tried in order until one serves. Level 0 is the fast path. Level 1 turns off
-# the two things most likely to break tensor-parallel on a pair of T4s, which
-# have no NVLink and no peer-to-peer: CUDA graph capture and the custom
-# all-reduce kernel. Level 2 additionally halves the context, which is what an
-# engine-core failure looks like when it is really KV-cache pressure.
-# One model failing to load while another loads fine on the same machine is a
-# model-specific problem, so it is worth three cheap attempts before giving up.
+# Fork inside a notebook kernel that has already touched CUDA is a known way to
+# deadlock a tensor-parallel worker. Spawn costs a few seconds per launch.
+os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
+
+# Tried in order until one serves. Level 0 is the fast path. Level 1 turns off the
+# two things most likely to break tensor-parallel on a pair of T4s, which have no
+# NVLink and no peer-to-peer: CUDA graph capture and the custom all-reduce kernel.
+# Level 2 halves the context as well, which is what an engine-core failure looks
+# like when it is really KV-cache pressure. One model failing to load while
+# another loads fine on the same machine is model-specific, so it is worth three
+# cheap attempts before moving on.
 LAUNCH_LADDER = [
-    ("as configured", [], None),
-    ("eager, no custom all-reduce", ["--enforce-eager", "--disable-custom-all-reduce"], None),
-    ("eager, no custom all-reduce, 4k context",
-     ["--enforce-eager", "--disable-custom-all-reduce"], 4096),
+    ("default", [], None),
+    ("eager+no-custom-allreduce", ["--enforce-eager", "--disable-custom-all-reduce"], None),
+    ("eager+4k-context", ["--enforce-eager", "--disable-custom-all-reduce"], 4096),
 ]
+LAUNCH_TIMEOUT_S = 1200      # a model that has not loaded in 20 min will not
 
 
 def _port_free(port=PORT):
@@ -25,15 +29,10 @@ def _port_free(port=PORT):
         return s.connect_ex(("127.0.0.1", port)) != 0
 
 
-def _cmd(model, rung, extras=True):
-    """Required args, the rung's fallback flags, plus one cosmetic flag.
-
-    `--disable-log-requests` was removed in vLLM 0.11 in favour of an opt-in
-    `--enable-log-requests`, so newer releases reject it. It is the only flag in
-    the optional set: `--max-num-seqs` controls batching and has been stable for
-    years, so dropping it as collateral for a rejected cosmetic flag would
-    quietly cost throughput for the whole run.
-    """
+def _cmd(model, rung):
+    # No --disable-log-requests: it was removed in vLLM 0.11 for an opt-in
+    # --enable-log-requests, newer builds reject it, and probing for it cost a
+    # whole launch cycle per model. Newer vLLM does not log requests by default.
     _label, extra_args, ctx = rung
     return [
         sys.executable, "-m", "vllm.entrypoints.openai.api_server",
@@ -46,15 +45,22 @@ def _cmd(model, rung, extras=True):
         "--gpu-memory-utilization", str(GPU_MEM_FRACTION),
         "--tensor-parallel-size", str(TP),
         "--max-num-seqs", str(MAX_NUM_SEQS),
-    ] + extra_args + (["--disable-log-requests"] if extras else [])
+    ] + extra_args
 
 
 def _post(path, payload, timeout=600):
+    """A 4xx carries vLLM's explanation in the response body, and that body is the
+    only place the reason exists. Not reading it is how a run once recorded 200
+    consecutive failures without printing why once."""
     req = urllib.request.Request(
         f"{BASE_URL}{path}", data=_json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return _json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return _json.loads(r.read())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", "replace").strip()[:500]
+        raise RuntimeError(f"HTTP {exc.code} from vLLM: {body}") from None
 
 
 def root_cause(log_text, chars=2500):
@@ -65,43 +71,64 @@ def root_cause(log_text, chars=2500):
     return head[-chars:] if head else log_text[-chars:]
 
 
-def _attempt(model, rung, extras, timeout_s):
-    """One launch. Ready means 'returned a completion', not '/health answered':
-    the endpoint accepts connections before weights finish loading, so health
-    alone would let a run start early and fail every request at once."""
+def generation_check(model):
+    """Prove the server generates, at the settings the study will actually use.
+
+    A `max_tokens=1` ping proves the port answers and nothing more. One run passed
+    that check and then failed all 200 tasks, because the failure was in
+    generation, not in the socket. This is the same request shape the study sends,
+    so anything that will break the run breaks here instead - in seconds.
+    """
+    r = _post("/chat/completions", {
+        "model": model["short"],
+        "messages": [{"role": "user", "content":
+                      "Write a Python function that adds two numbers. "
+                      "Reply with a single code block."}],
+        "temperature": TEMPERATURE, "max_tokens": min(256, MAX_GEN_TOKENS)},
+        timeout=300)
+    text = (r["choices"][0]["message"]["content"] or "").strip()
+    if not text:
+        raise RuntimeError("server returned an empty completion")
+    return text
+
+
+def _attempt(model, rung):
     label = rung[0]
-    suffix = label.split(",")[0].replace(" ", "_")
-    log_path = os.path.join(LOG_DIR, f"{model['short']}.{suffix}.log")
+    log_path = os.path.join(LOG_DIR, f"{model['short']}.{label}.log")
     log = open(log_path, "w")
-    proc = subprocess.Popen(_cmd(model, rung, extras), stdout=log,
+    proc = subprocess.Popen(_cmd(model, rung), stdout=log,
                             stderr=subprocess.STDOUT, preexec_fn=os.setsid,
                             env=os.environ.copy())
     started = time.time()
     while True:
         if proc.poll() is not None:
             log.flush()
-            text = open(log_path).read()
-            if extras and ("unrecognized arguments" in text or "invalid choice" in text):
-                print("    --disable-log-requests rejected by this vLLM; dropping it")
-                return _attempt(model, rung, False, timeout_s)
             raise RuntimeError(f"exited {proc.returncode}. Root cause "
-                               f"(full log at {log_path}):\n{root_cause(text)}")
+                               f"(full log at {log_path}):\n{root_cause(open(log_path).read())}")
         try:
             _post("/chat/completions",
                   {"model": model["short"], "max_tokens": 1,
                    "messages": [{"role": "user", "content": "ping"}]}, timeout=20)
-            print(f"  ready in {(time.time() - started) / 60:.1f} min ({label})")
-            return proc, log_path
         except Exception:
-            pass
-        if time.time() - started > timeout_s:
+            if time.time() - started > LAUNCH_TIMEOUT_S:
+                stop_server(proc)
+                raise RuntimeError(f"not ready in {LAUNCH_TIMEOUT_S}s\n"
+                                   f"{root_cause(open(log_path).read())}")
+            time.sleep(5)
+            continue
+
+        # Answering is not serving. Confirm it generates before committing the run.
+        try:
+            sample = generation_check(model)
+        except Exception as exc:
             stop_server(proc)
-            raise RuntimeError(f"not ready in {timeout_s}s\n"
-                               f"{root_cause(open(log_path).read())}")
-        time.sleep(5)
+            raise RuntimeError(f"loaded but cannot generate: {exc}")
+        print(f"  ready in {(time.time() - started) / 60:.1f} min ({label}); "
+              f"sample: {sample.splitlines()[0][:60]!r}")
+        return proc, log_path
 
 
-def start_server(model, timeout_s=2400):
+def start_server(model):
     if not _port_free():
         raise RuntimeError("port 8000 in use; run the shutdown cell")
     errors = []
@@ -109,15 +136,12 @@ def start_server(model, timeout_s=2400):
         if n:
             print(f"  retrying: {rung[0]}")
         try:
-            return _attempt(model, rung, True, timeout_s)
+            return _attempt(model, rung)
         except Exception as exc:
             errors.append(f"[{rung[0]}] {exc}")
-            if not _port_free():
-                subprocess.run("pkill -f vllm.entrypoints.openai.api_server",
-                               shell=True)
-                time.sleep(10)
-    raise RuntimeError("every launch configuration failed:\n\n"
-                       + "\n\n".join(errors))
+            subprocess.run("pkill -f vllm.entrypoints.openai.api_server", shell=True)
+            time.sleep(10)
+    raise RuntimeError("every launch configuration failed:\n\n" + "\n\n".join(errors))
 
 
 def stop_server(proc):

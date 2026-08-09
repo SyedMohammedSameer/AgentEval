@@ -7,14 +7,12 @@ def make_chat(model):
     """Adapt the OpenAI-compatible endpoint to the (reply, tokens) contract the
     study is written against.
 
-    A 4xx carries the server's explanation in the response body, and that body is
-    the only place the reason exists. Reading it out is why this raises a message
-    rather than a bare HTTPError: a run once recorded 200 consecutive failures
-    whose cause was never printed anywhere.
+    _post already turns a 4xx into a message carrying vLLM's own explanation, so
+    the reason reaches the record rather than dying inside an unread response body.
 
-    A 4xx is also not retried. The server will reject the identical request the
-    same way, so retrying only doubles the time spent failing. Transient network
-    faults get one retry, which is what that was for.
+    A 4xx is not retried: the server rejects the identical request the same way,
+    so a retry only doubles the time spent failing. The one retry is for transient
+    faults, which is all it was ever for.
     """
     def chat(prompt):
         payload = {"model": model["short"],
@@ -26,10 +24,9 @@ def make_chat(model):
                 r = _post("/chat/completions", payload, timeout=900)
                 return (r["choices"][0]["message"]["content"] or "",
                         (r.get("usage") or {}).get("completion_tokens", 0))
-            except urllib.error.HTTPError as exc:
-                body = exc.read().decode("utf-8", "replace").strip()[:400]
-                raise RuntimeError(f"HTTP {exc.code} from vLLM: {body}") from None
             except Exception as exc:
+                if "HTTP 4" in str(exc):
+                    raise
                 last = exc
                 if attempt == 0:
                     time.sleep(3)
