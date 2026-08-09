@@ -4,7 +4,6 @@ __pycache__/
 .ipynb_checkpoints/
 results/
 *.log
-data/
 zenodo/
 figures/*.png
 paper/*.aux
