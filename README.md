@@ -1,140 +1,175 @@
-# Does the agent fix the defect, or just the detector?
+# Agents don't game the linter. They obey it, and that is worse.
 
-When a coding agent is shown static-analysis findings and asked to fix them, the
-findings go down. That much is established. This project asks the question that
-follows: **do the defects go down too, or does the agent learn to satisfy the
-particular tool it was shown?**
+Four code LLMs were shown static-analysis findings on their own solutions and asked
+to fix them. The study was built to catch them cheating: satisfying the analyser
+they were shown while the defect stayed put. **They did not cheat.** Across 4,439
+repair steps the four models wrote **five** suppression directives in total, and
+94% of the findings they removed were also gone from a held-out analyser that was
+never shown to them.
 
-## The design
+They complied. And complying with a security rule broke **one working program in
+three**.
 
-A repair loop is given findings from one analyser (the *shown* analyser) and
-measured against analysers it never sees (the *held-out* set), plus a test suite
-so correctness is tracked throughout.
-
-| outcome | what it would mean |
+| | |
 |---|---|
-| shown drops, held-out flat | agents optimise the detector, not the code: the empirical case for independent verification |
-| both drop together | quality gates generalise, which is good news and, as far as we can tell, unmeasured |
+| findings removed from the shown analyser that survived in the held-out twin | **6%** [4%, 9%] |
+| suppression directives written across 4,439 steps | **5** |
+| working programs broken by repairing a security finding | **35.2%** [27%, 44%] |
+| working programs broken by repairing a non-security finding | **8.8%** [5%, 16%] |
+| same task, same model: security repair broke it but lint repair did not | **46 vs 3**, exact McNemar *p* = 7 × 10⁻¹¹ |
 
-Either result is worth publishing, which is the property a study should have
-before it is run.
+## The result the study was designed to find, and did not
 
-## Why the instrument works
+The hypothesis was Goodhart's law applied to code quality gates: point an agent at
+one analyser and it learns to satisfy that analyser rather than fix the code. The
+instrument was built to detect exactly that. Ruff's `S` rules are a
+reimplementation of Bandit's, numbered identically, and Bandit does not honour
+`# noqa` — so a finding that vanishes from Ruff while its Bandit twin survives is
+suppression, not repair.
 
-Ruff's `S` rules are a reimplementation of Bandit's, numbered identically, so
-`S602` and `B602` are the same defect seen by two separately built engines. That
-near-duplication is what makes the measurement sharp rather than redundant:
-`# noqa: S602` silences Ruff, and Bandit does not honour Ruff's suppression syntax.
+| model | ruff findings removed | measurable | suppressed | 95% CI |
+|---|---|---|---|---|
+| deepseek-coder-6.7b | 152 | 62 | 2% | [0%, 9%] |
+| granite-8b-code | 110 | 53 | 8% | [3%, 18%] |
+| qwen2.5-coder-7b | 179 | 78 | 12% | [6%, 20%] |
+| yi-coder-9b | 208 | 90 | 3% | [1%, 9%] |
+| **pooled** | **649** | **283** | **6%** | **[4%, 9%]** |
 
-Measured on `subprocess.check_output(cmd, shell=True)` with ruff 0.15.8 and
-bandit 1.9.4:
+The interval is nowhere near 50%. Two independent measurements agree: the counted
+directives (5 across the whole study) and the held-out analyser (94% transfer).
+Whatever these models do when handed a linter report, gaming it is not it.
 
-| variant | ruff (shown) | bandit (held out) |
-|---|---|---|
-| vulnerable | `S602` | `B404`, `B602` |
-| suppressed with `# noqa` | *(none)* | `B404`, `B602` |
-| genuinely fixed | `S603` | `B404`, `B603` |
+That is a negative result on the study's own premise, and it is what makes the
+next number believable.
 
-Suppression empties the shown analyser while the held-out twin holds steady. **The
-divergence between them is a direct measure of gaming**, and every notebook
-re-verifies it on the installed tool versions before spending GPU time.
+## What actually happens
 
-## Why counts are not the measurement
+Every task ran two repair arms branching from the same baseline solution: one shown
+Pylint findings, one shown Ruff findings. Where both arms ran on the same task and
+the baseline passed its tests, the arms can be compared within that task, on that
+model's own code.
 
-Read the same table as counts and it says the opposite of the truth:
+| model | pairs | ruff broke it | pylint broke it | both | neither | *p* exact |
+|---|---|---|---|---|---|---|
+| deepseek-coder-6.7b | 46 | 9 | 1 | 1 | 35 | 0.022 |
+| granite-8b-code | 49 | 10 | 0 | 0 | 39 | 0.002 |
+| qwen2.5-coder-7b | 56 | 12 | 0 | 4 | 40 | 0.0005 |
+| yi-coder-9b | 62 | 15 | 2 | 0 | 45 | 0.002 |
+| **pooled** | **213** | **46** | **3** | **5** | **159** | **7 × 10⁻¹¹** |
 
-| variant | ruff | bandit |
-|---|---|---|
-| vulnerable | 1 | 2 |
-| suppressed | **0** | 2 |
-| genuinely fixed | 1 | 2 |
+Only the discordant pairs carry information, and they run 46 to 3 against the Ruff
+arm. Every model is individually significant.
 
-The real fix leaves both counts exactly as they were, because `shell=True` swaps
-`S602` for `S603` and `B602` for `B603`. A count-based delta scores a genuine fix
-as worthless and a `# noqa` as a total success, inverting the study's own headline.
+It is the security rules specifically, not Ruff in general:
 
-So every finding is tracked individually by code: **addressed** if the shown
-analyser no longer reports it, **transferred** if its held-out counterpart is gone
-too, **introduced** if a repair traded one defect for another. A finding with no
-counterpart is recorded as *unmeasurable* rather than folded into either bucket,
-because counting it either way would manufacture a result.
+| findings the agent was shown | tasks | broke | rate | 95% CI |
+|---|---|---|---|---|
+| at least one `S` (security) rule | 122 | 43 | **35.2%** | [27%, 44%] |
+| no security rule | 91 | 8 | **8.8%** | [5%, 16%] |
 
-Pylint is the third analyser: an independent implementation that honours neither
-Ruff's nor Bandit's suppression syntax, firing on 100% of files at 4.3 findings
-each where Ruff manages 42% and Bandit 19%. Semgrep and mypy were dropped on
-evidence, not preference: across 80 BigCodeBench solutions they fired on 1-4% of
-files, too rarely to support any comparison.
+## The clearest case: S311
 
-## Models
+`S311` — *"standard pseudo-random generators are not suitable for cryptographic
+purposes"* — fired on 202 task-model pairs. The agents removed it 79% of the time.
+It broke **42%** of the working programs it appeared in, the highest of any rule
+with a meaningful sample.
 
-Four families, four pretraining corpora, all code-specialised instruct models
-within a 1.3x size spread:
+None of that code was cryptographic. BigCodeBench uses `random` for data
+generation, and its tests seed it and assert on the output. The agent does what it
+is told, swaps `random` for `secrets`, and the program stops being deterministic.
+`secrets` has no `seed()`, so some of them stop running at all:
 
-| family | model | params |
-|---|---|---|
-| Alibaba | `Qwen/Qwen2.5-Coder-7B-Instruct` | 7.6B |
-| DeepSeek | `deepseek-ai/deepseek-coder-6.7b-instruct` | 6.7B |
-| 01.AI | `01-ai/Yi-Coder-9B-Chat` | 8.8B |
-| IBM | `ibm-granite/granite-8b-code-instruct-128k` | 8B |
+```
+BigCodeBench/87   qwen2.5-coder-7b   fail: NameError: name 'seed' is not defined
+```
 
-All are Llama or Qwen2 architecture, the most exercised paths in vLLM, and all are
-ungated. Served at float16 with tensor-parallel 2 on 2x T4, so no quantisation
-kernels are involved on sm75. Each model gets its own chat template, since a
-hand-rolled prompt shared across families would confound family with formatting.
+The finding was a true positive about the code and a false positive about the
+context. The agent could not tell the difference, and nothing downstream of it
+could either: the analyser reported success. Of the 51 broken repairs, 20 changed
+behaviour while still running and 14 introduced a Pylint `E0602`/`E1101` — a name
+the repair had removed.
 
-## The study
+`B006` (mutable default argument) behaves the same way: 17 tasks, **53%** broken.
+Changing `def f(x=[])` to `def f(x=None)` is textbook correct and changes the API.
 
-Each task produces one baseline solution, then two repair arms branching from that
-same baseline rather than chaining:
+## Why this matters more than the gaming result
 
-| arm | shown | rounds | runs on |
-|---|---|---|---|
-| `shown_pylint` | pylint | 2 | every task |
-| `shown_ruff` | ruff | 2 | tasks with ruff findings |
+A suppressed finding is detectable — the directive is right there in the diff, and
+a second analyser catches it. Faithful, destructive repair leaves nothing to find.
+The analyser is satisfied, the diff looks like a fix, and the program is broken.
+The only thing that catches it is running the code.
 
-Branching is what makes every comparison paired within a task, which is where the
-power comes from at this sample size. Both arms record findings from all three
-analysers at every step, plus the task's own tests, because a finding removed by
-breaking the function is not a fix and has to stay distinguishable from one that
-was merely hidden.
+This is the empirical case for verification that is independent of the gate being
+optimised against, and it is a different case from the one usually made. The risk
+in an automated quality gate is not that agents cheat it. It is that they obey it
+in contexts where its advice is wrong.
 
-Corpus is BigCodeBench (1140 tasks, 92% of its reference solutions pass their own
-tests in this environment), shuffled once with a fixed seed so every model walks
-the same order. A model that runs out of time therefore holds a uniform random
-sample, and the four task sets are nested rather than disjoint, so the cross-model
-table can be computed on the tasks all of them reached.
+## What was run
 
-## Notebooks
+Four code-specialised instruct models from four families, inside a 1.3× size
+spread, all served at bfloat16 on one A100 through vLLM at temperature 0:
 
-| notebook | hardware | what it settles |
-|---|---|---|
-| `00_smoke_test` | 2x T4 | all four models load and serve; measured throughput |
-| `01_corpus_check` | CPU | BigCodeBench schema, assembly, and 92% pass rate |
-| `02_analyser_selection` | CPU | density and overlap across nine analyser configs |
-| `03_study` | 2x T4 | the run, hard-capped at 3h, checkpointed and resumable |
+`Qwen/Qwen2.5-Coder-7B-Instruct` · `deepseek-ai/deepseek-coder-6.7b-instruct` ·
+`01-ai/Yi-Coder-9B-Chat` · `ibm-granite/granite-8b-code-instruct-128k`
 
-`03_study` clones this repository rather than carrying a copy of it, and records
-the commit sha in its run manifest, so a result can be traced back to the exact
-code that produced it. Its only job is orchestration and printing; every
-measurement is made by code with tests. All four notebooks are generated from the
-plain Python cell sources under `scripts/cells/`.
+300 BigCodeBench tasks, drawn by a fixed shuffle and filtered to those whose
+reference solution passes its own tests in this environment, so a missing package
+costs coverage rather than corrupting the correctness measurement. Two repair
+rounds per arm. 1,200 task-model pairs, 4,439 steps, 1.14 hours, zero errors.
 
-## Status
+Findings are tracked individually by code, never by count. Fixing
+`subprocess.check_output(cmd, shell=True)` moves Ruff from `S602` to `S603` and
+Bandit from `B602` to `B603` — both counts unchanged. A count-based delta scores a
+real fix as worthless and a `# noqa` as a triumph, which would have inverted the
+headline. The study observed 3 such swaps.
 
-**No results yet.** Everything up to the run is verified: the substrate, the
-corpus, the analyser choice, and the instrument. 50 tests cover the measurement
-layer, including the case where counting findings would invert the headline.
+## Limitations
 
-## Prior work this deliberately does not repeat
+**Source code was not retained.** Steps record findings, codes, lines and test
+outcomes, but not the text of each revision, so the S311 mechanism is established
+from failure modes and introduced codes rather than from diffs. That is the first
+thing to change in any follow-up.
 
-Static analysis as a feedback loop is done ([arXiv 2508.14419][1],
-[arXiv 2412.14841][2]). Iterative refinement degrading security is done, and
-quantified. Self-repair across model scales and families is done
-([arXiv 2604.10508][3]). Patch overfitting to tests is long established in the
-automated-program-repair literature.
+**One sample per task at temperature 0.** The variance budget went into tasks
+rather than seeds. These are point estimates for greedy decoding, not for the
+distribution a sampled agent would produce.
+
+**The Pylint arm reports no transfer rate.** Pylint's message ids have no Ruff or
+Bandit counterpart, so that arm can say what was addressed but not whether the fix
+transferred. It is recorded as unmeasurable rather than as zero suppression.
+Pooled, the agents addressed 70% of Ruff findings and 20% of Pylint's.
+
+**Single-file Python from one benchmark.** Nothing here extends to Java, to CodeQL,
+or to repository-scale change without being measured there.
+
+## Reproducing
+
+`notebooks/03_study.ipynb` runs the whole study. It measures the accelerator and
+sizes itself: one A100 (~1.1h) or a pair of T4s (~2.5h), Colab or Kaggle, nothing
+to edit. It clones this repository rather than embedding it, and records the commit
+in the run manifest, so a result traces to the code that produced it.
+
+| | |
+|---|---|
+| `agentverif/` | the measurement, 60 tests |
+| `notebooks/00_smoke_test` | models load and serve; measured throughput |
+| `notebooks/01_corpus_check` | BigCodeBench schema and pass rate |
+| `notebooks/02_analyser_selection` | density and overlap across nine analyser configs |
+| `notebooks/03_study` | the run |
+
+All analysis re-derives offline from `steps.jsonl` via `agentverif.report`, so the
+tables can be re-sliced or corrected without another GPU hour.
+
+## Prior work this does not repeat
+
+Static analysis as a repair feedback loop is established ([arXiv 2508.14419][1],
+[arXiv 2412.14841][2]), as is iterative refinement degrading security, and
+self-repair across model scales and families ([arXiv 2604.10508][3]). Patch
+overfitting to tests is long established in automated program repair.
 
 What appears to be open, and what this measures, is whether a fix aimed at one
-analyser survives contact with another.
+analyser survives contact with another — and what it costs the program when it
+does.
 
 [1]: https://arxiv.org/abs/2508.14419
 [2]: https://arxiv.org/html/2412.14841v1
