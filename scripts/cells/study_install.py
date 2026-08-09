@@ -23,6 +23,15 @@ sh(f"pip install -q {VLLM_SPEC or '-U vllm'}")
 # The analysers whose findings are the measurement.
 sh("pip install -q ruff bandit pylint")
 
+# BigCodeBench is library-heavy: its tests import Faker, textblob, wordcloud and
+# friends, and a missing one fails the test no matter what the model wrote. Most
+# already ship in the Kaggle image. No -U, and check=False, because a single
+# unavailable wheel must not end the run - the corpus cell measures what is
+# actually importable and drops the rest.
+sh("pip install -q Faker textblob wordcloud prettytable texttable natsort "
+   "holidays xmltodict python-docx pyquery python-Levenshtein soundfile "
+   "librosa docxtpl openpyxl xlrd", check=False)
+
 # datasets ships in the Kaggle image. Installing it with -U after vLLM can pull a
 # newer numpy or pyarrow underneath vLLM's compiled extensions and break the
 # engine at load time, so it is only installed if genuinely missing, and never

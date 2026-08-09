@@ -149,6 +149,49 @@ def test_time_budget_stops_the_run():
     assert counters["tasks"] < len(many)
 
 
+def test_a_dead_endpoint_stops_the_run_instead_of_grinding_through_the_corpus():
+    """A server that is up but answers nothing will fail every task identically.
+    Recording 200 empty tasks and reporting it as a completed run is worse than
+    stopping, because the failure is invisible until analysis."""
+    def dead(prompt):
+        raise RuntimeError("HTTP 400: bad request")
+
+    out = os.path.join(tempfile.mkdtemp(), "steps.jsonl")
+    many = [Task(**{**TASK.__dict__, "task_id": f"T/{i}"}) for i in range(60)]
+    counters = run_study(many, dead, "stub", out, workers=4, abort_after=10)
+
+    assert counters["tasks"] < len(many), "must not walk the whole corpus"
+    assert "HTTP 400" in counters["abort_reason"], "the error must reach the operator"
+
+
+def test_a_healthy_run_is_never_aborted_by_the_gate():
+    out = os.path.join(tempfile.mkdtemp(), "steps.jsonl")
+    many = [Task(**{**TASK.__dict__, "task_id": f"T/{i}"}) for i in range(12)]
+    counters = run_study(many, scripted(VULNERABLE, FIXED), "stub", out,
+                         workers=4, abort_after=10)
+    assert counters["tasks"] == len(many)
+    assert not counters["abort_reason"]
+
+
+def test_occasional_failures_do_not_trip_the_gate():
+    """Only a total failure aborts. A model that errors on some tasks and works
+    on others is a normal run, not a broken endpoint."""
+    calls = {"n": 0}
+
+    def flaky(prompt):
+        calls["n"] += 1
+        if calls["n"] % 3 == 0:
+            raise RuntimeError("transient")
+        body = VULNERABLE if "Fix the reported issues" not in prompt else FIXED
+        return f"```python\n{body}```", len(body) // 4
+
+    out = os.path.join(tempfile.mkdtemp(), "steps.jsonl")
+    many = [Task(**{**TASK.__dict__, "task_id": f"T/{i}"}) for i in range(30)]
+    counters = run_study(many, flaky, "stub", out, workers=1, abort_after=10)
+    assert counters["tasks"] == len(many)
+    assert not counters["abort_reason"]
+
+
 def test_records_are_valid_jsonl():
     out = os.path.join(tempfile.mkdtemp(), "steps.jsonl")
     run_study([TASK], scripted(VULNERABLE, FIXED), "stub", out, workers=1)

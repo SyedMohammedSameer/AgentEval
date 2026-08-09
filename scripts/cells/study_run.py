@@ -5,9 +5,17 @@ from agentverif.study import REPAIR_ROUNDS, run_study
 
 def make_chat(model):
     """Adapt the OpenAI-compatible endpoint to the (reply, tokens) contract the
-    study is written against. One retry: at 32 concurrent requests a transient
-    failure would otherwise cost a whole task's record, and a retry costs a few
-    seconds."""
+    study is written against.
+
+    A 4xx carries the server's explanation in the response body, and that body is
+    the only place the reason exists. Reading it out is why this raises a message
+    rather than a bare HTTPError: a run once recorded 200 consecutive failures
+    whose cause was never printed anywhere.
+
+    A 4xx is also not retried. The server will reject the identical request the
+    same way, so retrying only doubles the time spent failing. Transient network
+    faults get one retry, which is what that was for.
+    """
     def chat(prompt):
         payload = {"model": model["short"],
                    "messages": [{"role": "user", "content": prompt}],
@@ -18,11 +26,14 @@ def make_chat(model):
                 r = _post("/chat/completions", payload, timeout=900)
                 return (r["choices"][0]["message"]["content"] or "",
                         (r.get("usage") or {}).get("completion_tokens", 0))
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", "replace").strip()[:400]
+                raise RuntimeError(f"HTTP {exc.code} from vLLM: {body}") from None
             except Exception as exc:
                 last = exc
                 if attempt == 0:
                     time.sleep(3)
-        raise last
+        raise RuntimeError(f"{type(last).__name__}: {last}")
     return chat
 
 
@@ -53,33 +64,21 @@ for i, model in enumerate(MODELS):
         try:
             proc, log_path = start_server(model)
         except Exception as exc:
-            # A server that will not start is an environment problem, not a model
-            # problem, and the remaining models will hit it identically. Marching
-            # all four into the same wall wastes the session and buries the one
-            # error worth reading, so the sweep stops here unless something has
-            # already served, which would make this model the odd one out.
-            print(f"  SERVER FAILED TO START: {exc}")
-            runs.append({**model, "status": "failed: no_server", "tasks": 0})
-            if not any(r["status"] == "ok" for r in runs):
-                raise SystemExit(
-                    "\nThe first model did not load, so the remaining "
-                    f"{len(MODELS) - i - 1} would fail the same way and the sweep "
-                    "is stopping instead.\n\nThis is the environment, not the "
-                    "study: fix it and re-run this cell, which resumes from "
-                    f"{STEPS_PATH} rather than starting over.\n"
-                    "The engine-core error is printed above; full logs in "
-                    f"{LOG_DIR}."
-                )
+            # Keep going. Qwen once failed to load on a machine where DeepSeek
+            # loaded fine four minutes later, so a failed launch says something
+            # about that model on this vLLM, not about the environment. Stopping
+            # the sweep here would have thrown away three working models to
+            # protect against a wasted ten minutes.
+            print(f"  SERVER FAILED TO START, moving on:\n{exc}")
+            runs.append({**model, "status": "failed: no_server", "tasks": 0,
+                         "error": str(exc)[-1500:]})
             continue
 
         load_min = (time.time() - load_started) / 60
         counters = run_study(TASKS, make_chat(model), model["short"], STEPS_PATH,
                             workers=WORKERS, time_budget_s=budget)
-        runs.append({**model, "status": "ok", "load_min": round(load_min, 1),
-                     **counters})
-    except SystemExit:
-        stop_server(proc)
-        raise
+        runs.append({**model, "load_min": round(load_min, 1), **counters,
+                     "status": "aborted" if counters["abort_reason"] else "ok"})
     except Exception as exc:
         print(f"  FAILED: {type(exc).__name__}: {exc}")
         runs.append({**model, "status": f"failed: {type(exc).__name__}", "tasks": 0})
@@ -92,10 +91,17 @@ print(f"{'model':24s} {'status':12s} {'load':>6s} {'tasks':>7s} {'steps':>7s} {'
 for r in runs:
     print(f"{r['short']:24s} {r['status'][:12]:12s} {r.get('load_min', 0):>6} "
           f"{r.get('tasks', 0):>7} {r.get('steps', 0):>7} {r.get('errors', 0):>7}")
+# Whatever went wrong, print it here rather than leaving it in the scrollback.
+for r in runs:
+    if r.get("abort_reason") or r.get("last_error") or r.get("error"):
+        print(f"\n{r['short']}: {r.get('abort_reason') or r.get('last_error') or ''}")
+        if r.get("error"):
+            print(r["error"])
 
 with open(os.path.join(OUT_DIR, "run_manifest.json"), "w") as fh:
     json.dump({"commit": COMMIT, "branch": BRANCH,
-               "seed": SEED, "n_tasks": N_TASKS, "temperature": TEMPERATURE,
+               "seed": SEED, "n_tasks": len(TASKS), "n_tasks_requested": N_TASKS,
+               "task_ids": [t.task_id for t in TASKS], "temperature": TEMPERATURE,
                "max_gen_tokens": MAX_GEN_TOKENS, "workers": WORKERS,
                "tensor_parallel": TP, "dtype": "float16",
                "analyser_versions": TOOL_VERSIONS,

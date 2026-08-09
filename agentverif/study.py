@@ -162,7 +162,7 @@ def _completed_keys(path: str) -> set:
 
 
 def run_study(tasks, chat, model_name, out_path, *, workers=16,
-              time_budget_s=None, progress_every=25):
+              time_budget_s=None, progress_every=25, abort_after=10):
     """Process tasks until they run out or the time budget expires.
 
     The budget is a hard stop rather than an estimate. Sizing a run by predicted
@@ -179,7 +179,8 @@ def run_study(tasks, chat, model_name, out_path, *, workers=16,
 
     lock = threading.Lock()
     start = time.time()
-    counters = {"tasks": 0, "steps": 0, "stopped": False, "errors": 0}
+    counters = {"tasks": 0, "steps": 0, "stopped": False, "errors": 0,
+                "failed_tasks": 0, "last_error": "", "abort_reason": ""}
 
     def worker(task):
         if counters["stopped"]:
@@ -200,6 +201,24 @@ def run_study(tasks, chat, model_name, out_path, *, workers=16,
             counters["tasks"] += 1
             counters["steps"] += len(steps)
             counters["errors"] += sum(1 for s in steps if s.error)
+
+            # A task whose baseline errored produced no observation at all. If
+            # every one of the first `abort_after` tasks is in that state, the
+            # server is up but unusable and the remaining tasks will fail the
+            # same way, so stop and surface the error instead of grinding through
+            # the whole corpus recording nothing. Doing exactly that, silently,
+            # is what made the last run worthless.
+            dead = next((s for s in steps if s.arm == "baseline" and s.error), None)
+            if dead:
+                counters["failed_tasks"] += 1
+                counters["last_error"] = dead.error
+                if (abort_after and counters["tasks"] >= abort_after
+                        and counters["failed_tasks"] == counters["tasks"]):
+                    counters["stopped"] = True
+                    counters["abort_reason"] = (
+                        f"first {counters['tasks']} tasks all failed at the "
+                        f"baseline: {dead.error}")
+
             if counters["tasks"] % progress_every == 0:
                 mins = (time.time() - start) / 60
                 print(f"  {counters['tasks']} tasks, {counters['steps']} steps, "
@@ -210,6 +229,10 @@ def run_study(tasks, chat, model_name, out_path, *, workers=16,
 
     mins = (time.time() - start) / 60
     print(f"{model_name}: {counters['tasks']} tasks, {counters['steps']} steps, "
-          f"{counters['errors']} errored, {mins:.1f} min"
-          f"{' (time budget reached)' if counters['stopped'] else ''}")
+          f"{counters['errors']} errored, {mins:.1f} min")
+    if counters["abort_reason"]:
+        print(f"  ABORTED: {counters['abort_reason']}")
+    elif counters["last_error"]:
+        print(f"  {counters['failed_tasks']} tasks failed at baseline, "
+              f"last error: {counters['last_error']}")
     return counters
